@@ -1,0 +1,459 @@
+# -*- coding: utf-8 -*-
+"""
+表达力训练器 本地后端(单文件,仅标准库 http.server + agent_gw + 可选 faster-whisper)。
+
+- GET  /api/health     -> {"ok": true, "llm": bool, "asr": "ready"|"loading"|"unavailable"}
+- POST /api/analyze    -> 调 kimi-for-coding 做质性分析;任何失败返回 HTTP 200 + {"ok": false}
+- POST /api/transcribe -> 接收原始音频字节,ffmpeg 转 16kHz 单声道 wav 后 faster-whisper
+                          转写(language="zh", word_timestamps=True, vad_filter=True);
+                          返回 {"ok": true, "segments": [...], "words": [...]}
+- 其余路径             -> 静态托管 dist/(SPA fallback 到 index.html)
+
+启动:venv/Scripts/python.exe server/app.py   (绑定 127.0.0.1:8788)
+鉴权:KIMI_API_KEY 环境变量,或 ~/.kimi/agent-gw.json;无 key 时 LLM 不可用,应用照常可跑。
+ASR :需 pip install faster-whisper;模型默认 small,可用 WHISPER_MODEL 覆盖,
+      缓存在项目 models/ 目录;模型不可用时 /api/transcribe 返回 ok:false,前端自动降级。
+"""
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+DIST_DIR = ROOT / "dist"
+MODELS_DIR = ROOT / "models"
+HOST = "127.0.0.1"
+PORT = 8788
+MODEL = "kimi-for-coding"
+LLM_TIMEOUT = 90  # 秒
+WHISPER_MODEL_NAME = os.environ.get("WHISPER_MODEL", "small")
+
+DEFAULT_FFMPEG = (
+    r"C:\Users\Administrator\AppData\Local\Programs\ffmpeg-chatcut\bin\ffmpeg.exe"
+)
+
+
+def find_ffmpeg() -> str | None:
+    """env FFMPEG_PATH > 已知安装路径 > PATH。"""
+    env = os.environ.get("FFMPEG_PATH")
+    if env and Path(env).is_file():
+        return env
+    if Path(DEFAULT_FFMPEG).is_file():
+        return DEFAULT_FFMPEG
+    return shutil.which("ffmpeg")
+
+
+FFMPEG = find_ffmpeg()
+
+# ── LLM 客户端:模块级单例 + 锁(requests.Session 非严格线程安全)──
+llm_client = None
+llm_init_error = None
+llm_lock = threading.Lock()
+try:
+    from agent_gw import AgentGwClient
+
+    llm_client = AgentGwClient(timeout=LLM_TIMEOUT)
+except Exception as exc:  # ValueError(无 key)、ImportError(未装 SDK)等
+    llm_init_error = f"{type(exc).__name__}: {exc}"
+
+# ── faster-whisper:可选组件,启动时后台线程预载模型 ──
+whisper_model = None
+whisper_error = None
+asr_status = "unavailable"  # "loading" | "ready" | "unavailable"
+whisper_lock = threading.Lock()
+try:
+    from faster_whisper import WhisperModel
+
+    asr_status = "loading"
+except Exception as exc:
+    whisper_error = f"{type(exc).__name__}: {exc}"
+
+
+def preload_whisper():
+    global whisper_model, whisper_error, asr_status
+    try:
+        model = WhisperModel(
+            WHISPER_MODEL_NAME,
+            device="cpu",
+            compute_type="int8",
+            download_root=str(MODELS_DIR),
+        )
+        whisper_model = model
+        asr_status = "ready"
+    except Exception as exc:
+        whisper_error = f"{type(exc).__name__}: {exc}"
+        asr_status = "unavailable"
+
+
+CONTENT_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "application/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".ico": "image/x-icon",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".map": "application/json; charset=utf-8",
+}
+
+SYSTEM_PROMPT = """你是一位严格而友善的口头表达教练,正在点评一段一分钟口头表达的文字稿。
+要求:
+1. 只输出一个 JSON 对象,不要输出 markdown 代码围栏以外的任何文字、解释或前后缀。
+2. 全部使用中文,措辞精炼。
+3. 输出 JSON 的结构必须是:
+{"scores":{"viewpoint":int,"structure":int,"content":int,"fluency":int},
+ "summary":"一句话诊断,80字以内",
+ "strengths":[{"title":"","description":"","suggestion":"","transcriptQuote":""}],
+ "improvements":[{"title":"","description":"","suggestion":"","transcriptQuote":""}],
+ "improvedOutline":["..."],
+ "detectedStructure":""}
+4. 四项评分为 0-100 的整数,客观校准:普通水平的即兴表达大多在 55-80 分,不要虚高。
+5. strengths 恰好 2 条;improvements 恰好 2 条。title 12 字以内,description 和 suggestion 各 60 字以内且必须具体,指出问题时说清怎么改。
+6. transcriptQuote 必须是用户文字稿的原文子串,逐字摘录,不要改写、不要补标点;找不到合适引用时该字段给空字符串。
+7. improvedOutline 最多 5 条,每条 30 字以内,基于用户原有的观点重组出更清晰的第二次回答提纲;不要替用户换观点,不要给完美范文。
+8. detectedStructure 从「观点—理由—例子—总结 / 问题—原因—解决办法 / 现象—分析—结论 / 背景—行动—结果 / 无明显结构」中选一个,或用不超过 12 个字简短描述。
+9. 我会提供本地统计指标(口癖次数、语速、观点出现时间等),fluency 评分必须与这些数据一致:口癖超过 10 次或语速明显异常时 fluency 不应高于 65。"""
+
+
+# 题型化评判标准(维度名不变,但"观点"的含义按题型解释)
+CATEGORY_RUBRICS = {
+    "观点": "本题是观点表达题。观点维度评判:立场是否明确、一致、出现不过晚;内容维度看是否有理由+例子+个人判断。",
+    "解释": "本题是概念解释题。观点维度评判:核心定义/结论是否尽早给出(\"这是什么\"),不评判立场;内容维度看是否通俗、有无类比和例子、有无术语堆砌;结构维度看\"是什么→为什么/怎么用→总结\"。",
+    "工作": "本题是工作汇报/介绍题(含产品介绍)。观点维度评判:结论/核心信息是否先行,不评判立场;内容维度看是否有具体事实、数据、措施;结构维度看\"背景→问题→措施→结果\"。",
+    "日常": "本题是日常话题题。观点维度评判:是否有明确的个人答案,不评判立场;内容维度看是否有具体经历和细节。",
+    "申论": "本题是公共议题题。观点维度评判:是否有明确主张;内容维度看是否有现象分析+可行建议。",
+}
+
+
+def build_user_prompt(payload: dict) -> str:
+    metrics = payload.get("metrics") or {}
+    category = str(payload.get("category") or "通用")
+    rubric = CATEGORY_RUBRICS.get(
+        category,
+        "按通用口头表达标准评判:核心信息明确、结构清晰、内容具体、表达流畅。",
+    )
+    lines = [
+        f"题目:{payload.get('topic', '')}",
+        f"题型:{category};场景:{payload.get('scenario', '')};受众:{payload.get('audience', '')}",
+        f"表达时长:{payload.get('durationSeconds', '')} 秒",
+        "",
+        f"评判标准:{rubric}",
+        "四个维度名称不变(观点/结构/内容/流畅度),但\"观点\"的含义必须按上述题型标准解释。",
+        "summary 和 improvements 的措辞要贴题型:介绍/工作类谈\"核心信息是否讲清、信息是否具体\",不要谈\"立场是否明确\"。",
+        "",
+        "本地统计指标(已由程序准确计算,请采信):",
+        f"- 总字数:{metrics.get('totalCharacters')}",
+        f"- 平均语速:{metrics.get('wordsPerMinute')} 字/分钟",
+        f"- 口癖总数:{metrics.get('fillerWordCount')} 次,高频口癖:{metrics.get('topFillers')}",
+        f"- 核心观点首次出现:第 {metrics.get('viewpointFirstAppearedAt')} 秒(null 表示未检测到)",
+        f"- 具体例子数量:{metrics.get('exampleCount')}",
+        f"- 最长停顿:{metrics.get('longestPauseSeconds')} 秒",
+        f"- 是否有明确结尾:{metrics.get('hasConclusion')}",
+        "",
+        "用户的文字稿(方括号内为大致时间):",
+        payload.get("transcript", ""),
+        "",
+        "请开始点评,只输出 JSON。",
+    ]
+    return "\n".join(str(x) for x in lines)
+
+
+def extract_json(text: str) -> dict:
+    """健壮解析:剥离 ```json 围栏,截取第一个 { 到最后一个 },再 json.loads。"""
+    cleaned = re.sub(r"```(?:json)?", "", text)
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("LLM 输出中没有 JSON 对象")
+    return json.loads(cleaned[start : end + 1])
+
+
+def clamp_score(value) -> int:
+    try:
+        n = int(round(float(value)))
+    except (TypeError, ValueError):
+        n = 60
+    return max(0, min(100, n))
+
+
+def sanitize_feedback(items, kind: str) -> list:
+    """校验并截断到 2 条;字段缺失的条目丢弃。"""
+    if not isinstance(items, list):
+        raise ValueError(f"{kind} 不是数组")
+    out = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        description = str(item.get("description") or "").strip()
+        suggestion = str(item.get("suggestion") or "").strip()
+        if not title or not description:
+            continue
+        out.append(
+            {
+                "title": title,
+                "description": description,
+                "suggestion": suggestion,
+                "transcriptQuote": str(item.get("transcriptQuote") or "").strip(),
+            }
+        )
+        if len(out) >= 2:
+            break
+    if not out:
+        raise ValueError(f"{kind} 没有有效条目")
+    return out
+
+
+def validate_result(data: dict) -> dict:
+    if not isinstance(data, dict):
+        raise ValueError("LLM 输出不是 JSON 对象")
+    raw_scores = data.get("scores")
+    if not isinstance(raw_scores, dict):
+        raise ValueError("scores 缺失")
+    scores = {
+        key: clamp_score(raw_scores.get(key))
+        for key in ("viewpoint", "structure", "content", "fluency")
+    }
+    summary = str(data.get("summary") or "").strip()
+    if not summary:
+        raise ValueError("summary 为空")
+    outline = data.get("improvedOutline")
+    if not isinstance(outline, list):
+        raise ValueError("improvedOutline 不是数组")
+    outline = [str(x).strip() for x in outline if str(x).strip()][:5]
+    if len(outline) < 3:
+        raise ValueError("improvedOutline 条目不足")
+    return {
+        "scores": scores,
+        "summary": summary,
+        "strengths": sanitize_feedback(data.get("strengths"), "strengths"),
+        "improvements": sanitize_feedback(data.get("improvements"), "improvements"),
+        "improvedOutline": outline,
+        "detectedStructure": str(data.get("detectedStructure") or "无明显结构").strip()[:20],
+    }
+
+
+def call_llm(payload: dict) -> dict:
+    """返回 {"ok": True, "result": ...} 或 {"ok": False, "reason": ...}。"""
+    if llm_client is None:
+        return {"ok": False, "reason": f"llm unavailable: {llm_init_error}"}
+    started = time.time()
+    try:
+        with llm_lock:
+            resp = llm_client.chat_completion(
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": build_user_prompt(payload)},
+                ],
+                max_tokens=6000,
+            )
+        content = resp["choices"][0]["message"]["content"]
+        result = validate_result(extract_json(content))
+        return {
+            "ok": True,
+            "result": result,
+            "elapsedSeconds": round(time.time() - started, 1),
+        }
+    except Exception as exc:
+        return {"ok": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+
+# ── faster-whisper 转写 ──
+
+AUDIO_SUFFIXES = {
+    "audio/webm": ".webm",
+    "audio/mp4": ".mp4",
+    "audio/m4a": ".m4a",
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/ogg": ".ogg",
+}
+
+
+def transcribe_audio(raw: bytes, content_type: str) -> dict:
+    """原始音频字节 -> {"ok": True, "segments": [...], "words": [...]} 或 ok:false。"""
+    if asr_status == "loading":
+        return {"ok": False, "reason": "asr loading: 模型仍在加载,请稍后重试"}
+    if asr_status != "ready" or whisper_model is None:
+        return {"ok": False, "reason": f"asr unavailable: {whisper_error}"}
+    if FFMPEG is None:
+        return {"ok": False, "reason": "ffmpeg 未找到"}
+    if not raw:
+        return {"ok": False, "reason": "音频为空"}
+
+    suffix = AUDIO_SUFFIXES.get((content_type or "").split(";")[0].strip().lower(), ".bin")
+    tmp_in = None
+    tmp_wav = None
+    started = time.time()
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
+            f.write(raw)
+            tmp_in = f.name
+        tmp_wav = tmp_in + ".wav"
+        # MediaRecorder 的 webm 常缺时长元数据,统一转 16kHz 单声道 wav 修正
+        proc = subprocess.run(
+            [FFMPEG, "-y", "-i", tmp_in, "-ar", "16000", "-ac", "1", "-f", "wav", tmp_wav],
+            capture_output=True,
+            timeout=120,
+        )
+        if proc.returncode != 0:
+            return {"ok": False, "reason": f"ffmpeg 转换失败: {proc.stderr.decode('utf-8', 'ignore')[-200:]}"}
+
+        with whisper_lock:
+            segments_iter, _info = whisper_model.transcribe(
+                tmp_wav,
+                language="zh",
+                word_timestamps=True,
+                vad_filter=True,
+            )
+            segments = []
+            words = []
+            for seg in segments_iter:
+                text = (seg.text or "").strip()
+                if not text:
+                    continue
+                segments.append(
+                    {
+                        "start": round(float(seg.start), 2),
+                        "end": round(float(seg.end), 2),
+                        "text": text,
+                    }
+                )
+                for w in seg.words or []:
+                    word = (w.word or "").strip()
+                    if not word:
+                        continue
+                    words.append(
+                        {
+                            "w": word,
+                            "start": round(float(w.start), 2),
+                            "end": round(float(w.end), 2),
+                        }
+                    )
+        if not segments:
+            return {"ok": False, "reason": "未识别到语音内容"}
+        return {
+            "ok": True,
+            "segments": segments,
+            "words": words,
+            "elapsedSeconds": round(time.time() - started, 1),
+        }
+    except Exception as exc:
+        return {"ok": False, "reason": f"{type(exc).__name__}: {exc}"}
+    finally:
+        for p in (tmp_in, tmp_wav):
+            if p:
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
+
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    # 转写耗时较长(CPU small 模型 60s 音频约 20-60s),读超时放宽
+    timeout = 180
+
+    def log_message(self, fmt, *args):  # noqa: A003
+        sys.stderr.write("[server] %s %s\n" % (self.command, self.path))
+
+    # ── helpers ──
+    def send_json(self, obj, status: int = 200):
+        body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def read_body(self) -> bytes:
+        length = int(self.headers.get("Content-Length") or 0)
+        if length <= 0 or length > 64 * 1024 * 1024:
+            raise ValueError("请求体为空或过大")
+        return self.rfile.read(length)
+
+    # ── routes ──
+    def do_GET(self):
+        if self.path == "/api/health":
+            self.send_json({"ok": True, "llm": llm_client is not None, "asr": asr_status})
+            return
+        if self.path.startswith("/api/"):
+            self.send_json({"ok": False, "reason": "not found"}, status=404)
+            return
+        self.serve_static()
+
+    def do_POST(self):
+        if self.path == "/api/analyze":
+            try:
+                payload = json.loads(self.read_body().decode("utf-8"))
+            except Exception as exc:
+                self.send_json({"ok": False, "reason": f"bad request: {exc}"})
+                return
+            if not str(payload.get("transcript") or "").strip():
+                self.send_json({"ok": False, "reason": "transcript 为空"})
+                return
+            self.send_json(call_llm(payload))
+            return
+        if self.path == "/api/transcribe":
+            try:
+                raw = self.read_body()
+            except Exception as exc:
+                self.send_json({"ok": False, "reason": f"bad request: {exc}"})
+                return
+            self.send_json(transcribe_audio(raw, self.headers.get("Content-Type") or ""))
+            return
+        self.send_json({"ok": False, "reason": "not found"}, status=404)
+
+    # ── static / SPA ──
+    def serve_static(self):
+        path = self.path.split("?", 1)[0].split("#", 1)[0]
+        if path == "/":
+            path = "/index.html"
+        candidate = (DIST_DIR / path.lstrip("/")).resolve()
+        if not str(candidate).startswith(str(DIST_DIR.resolve())) or not candidate.is_file():
+            candidate = DIST_DIR / "index.html"
+            if not candidate.is_file():
+                self.send_json(
+                    {"ok": False, "reason": "dist/ 不存在,请先运行 npm run build"},
+                    status=404,
+                )
+                return
+        ctype = CONTENT_TYPES.get(candidate.suffix.lower(), "application/octet-stream")
+        data = candidate.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+
+def main():
+    mode = "LLM 模式(kimi-for-coding)" if llm_client else f"LLM 不可用({llm_init_error})"
+    print(f"表达力训练器后端启动: http://{HOST}:{PORT}  [{mode}]", flush=True)
+    print(f"ffmpeg: {FFMPEG or '未找到'}", flush=True)
+    if asr_status == "loading":
+        print(f"ASR: 后台加载 faster-whisper 模型 {WHISPER_MODEL_NAME} ...", flush=True)
+        threading.Thread(target=preload_whisper, daemon=True).start()
+    else:
+        print(f"ASR 不可用: {whisper_error}", flush=True)
+    if not DIST_DIR.is_dir():
+        print("提示: dist/ 不存在,静态页面将 404;请先运行 npm run build", flush=True)
+    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
+
+
+if __name__ == "__main__":
+    main()
