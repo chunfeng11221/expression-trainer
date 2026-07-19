@@ -2,6 +2,12 @@
 cd /d "%~dp0"
 title 表达力训练器
 
+if not exist "dist\index.html" (
+  if exist "node_modules" if exist "venv\Scripts\python.exe" (
+    echo 检测到网页文件缺失,正在自动重新构建……
+    call npm run build
+  )
+)
 if not exist "dist\index.html" goto needinstall
 if not exist "venv\Scripts\python.exe" goto needinstall
 
@@ -26,11 +32,12 @@ timeout /t 1 >nul
 goto wait
 
 :busy
-echo 等了 30 秒还没起来。可能是 8788 端口被别的程序占用了:
-echo 1. 先直接试试在浏览器打开 http://127.0.0.1:8788 ^(也许已经启动了^)
-echo 2. 还是不行的话,把那个黑色小窗口里的内容拍下来,找懂技术的朋友看看
-pause
-exit /b 1
+echo 等了 30 秒还没起来。可能是 8788 端口被别的程序占用了。
+echo 先帮你打开页面看看——说不定其实已经启动了:
+start "" http://127.0.0.1:8788
+echo 如果页面打不开,把那个黑色小窗口里的内容拍下来,找懂技术的朋友看看。
+timeout /t 5 >nul
+exit /b 0
 
 :ready
 echo 已启动!浏览器即将打开 http://127.0.0.1:8788
