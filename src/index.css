@@ -1306,3 +1306,75 @@ p {
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------- AI 接入卡片(首页/设置页共用) ---------- */
+
+.ai-setup-card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 26px;
+  text-align: left;
+}
+
+.ai-setup-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.ai-setup-presets {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.preset-tag {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--primary);
+}
+
+.ai-setup-key {
+  margin-bottom: 4px;
+}
+
+.ai-setup-submit {
+  margin-top: 14px;
+  width: 100%;
+}
+
+.ai-setup-error {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.ai-setup-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--primary);
+  margin-top: 8px;
+}
+
+.ai-section .ai-setup-card {
+  border: none;
+  padding: 0;
+  background: transparent;
+  max-width: 480px;
+}
+
+.ai-section .ai-setup-title {
+  display: none;
+}
+
+.recorder-asr-note {
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--muted);
+}

@@ -42,7 +42,9 @@ export default function AudioRecorder({
     serviceRef.current = service
     const startedAt = Date.now()
     service.start(setLevel).catch(() => {
-      setError('无法访问麦克风。请检查浏览器地址栏的权限设置,允许后点击重试。')
+      setError(
+        '麦克风被拦住了。点一下浏览器地址栏左侧的小锁(或设置)图标,把"麦克风"改成"允许",然后点下面的重试。',
+      )
     })
     const timer = setInterval(() => {
       setElapsed((Date.now() - startedAt) / 1000)
@@ -77,7 +79,7 @@ export default function AudioRecorder({
     const service = new RecordingService()
     serviceRef.current = service
     service.start(setLevel).catch(() => {
-      setError('仍然无法访问麦克风。请确认系统已连接麦克风,且浏览器权限已允许。')
+      setError('还是连不上麦克风。请确认电脑插着麦克风、没被其他软件(如会议软件)独占,然后在浏览器设置里允许本站点使用麦克风。')
     })
   }
 
@@ -91,7 +93,6 @@ export default function AudioRecorder({
       </div>
     )
   }
-
   const remaining = Math.max(0, limitSeconds - elapsed)
 
   return (

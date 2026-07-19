@@ -229,6 +229,9 @@ export default function TrainingPage() {
           onFinish={handleFinish}
           onRestart={handleRestart}
         />
+        {!isSpeechRecognitionSupported() && (
+          <p className="recorder-asr-note">当前浏览器不支持实时字幕(建议用 Chrome/Edge);没有字幕不影响最终分析。</p>
+        )}
       </div>
     )
   }

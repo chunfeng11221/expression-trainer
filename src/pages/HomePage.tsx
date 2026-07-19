@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { LayoutList, Shuffle } from 'lucide-react'
+import AiSetupCard from '../components/AiSetupCard'
 import { getRandomTopic } from '../data/topics'
 import { fetchHealth } from '../services/aiAnalysisService'
 import { loadAttempts, loadSession, loadSettings, saveSession } from '../utils/storage'
@@ -57,15 +58,12 @@ export default function HomePage() {
         </p>
       )}
 
+      {llmReady === false && <AiSetupCard onSaved={() => setLlmReady(true)} />}
+
       <p className="home-settings">
         当前默认:{formatSeconds(settings.answerSeconds)}表达 · {formatSeconds(settings.prepareSeconds)}
         准备 · {settings.scene} · {settings.audience} <Link to="/settings">修改</Link>
       </p>
-      {llmReady === false && (
-        <p className="home-ai-hint">
-          <Link to="/settings">配置 AI 获得完整反馈</Link>
-        </p>
-      )}
 
       <p className="home-footer">
         <Link to="/history">训练历史</Link>
