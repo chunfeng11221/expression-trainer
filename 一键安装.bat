@@ -8,14 +8,23 @@ echo ==========================================
 echo.
 
 where npm >nul 2>nul
-if errorlevel 1 (
-  echo [缺少 Node.js]
-  echo 请先去这里下载安装^(选 LTS 版,一路下一步^):
-  echo   https://nodejs.org/zh-cn/download
-  echo 装完后关掉这个窗口,重新双击"一键安装.bat"。
-  pause
-  exit /b 1
-)
+if not errorlevel 1 goto nodeOk
+echo 没找到 Node.js,试试用 winget 自动安装……
+where winget >nul 2>nul
+if errorlevel 1 goto nodeManual
+winget install --id OpenJS.NodeJS.LTS -e --accept-package-agreements --accept-source-agreements
+if errorlevel 1 goto nodeManual
+echo Node.js 装好了。请关掉这个窗口,重新双击"一键安装.bat"继续。
+pause
+exit /b 0
+:nodeManual
+echo [缺少 Node.js]
+echo 请先去这里下载安装^(选 LTS 版,一路下一步^):
+echo   https://nodejs.org/zh-cn/download
+echo 装完后关掉这个窗口,重新双击"一键安装.bat"。
+pause
+exit /b 1
+:nodeOk
 echo [1/6] Node.js 已找到
 
 for /f "tokens=1 delims=v." %%v in ('node -v') do set NODEMAJOR=%%v
@@ -35,16 +44,25 @@ if not defined PYEXE (
 if not defined PYEXE (
   where python3 >nul 2>nul && python3 --version >nul 2>nul && set PYEXE=python3
 )
-if not defined PYEXE (
-  echo [缺少 Python]
-  echo 请先去这里下载安装:
-  echo   https://www.python.org/downloads/
-  echo 安装时一定勾选 "Add python.exe to PATH"^(安装第一页底部^)!
-  echo 注意:Windows 应用商店跳出来的"python"不是真 Python,别用它。
-  echo 装完后关掉这个窗口,重新双击"一键安装.bat"。
-  pause
-  exit /b 1
-)
+if defined PYEXE goto pythonOk
+echo 没找到 Python,试试用 winget 自动安装……
+where winget >nul 2>nul
+if errorlevel 1 goto pythonManual
+winget install --id Python.Python.3.12 -e --accept-package-agreements --accept-source-agreements
+if errorlevel 1 goto pythonManual
+echo Python 装好了。请关掉这个窗口,重新双击"一键安装.bat"继续。
+pause
+exit /b 0
+:pythonManual
+echo [缺少 Python]
+echo 请先去这里下载安装:
+echo   https://www.python.org/downloads/
+echo 安装时一定勾选 "Add python.exe to PATH"^(安装第一页底部^)!
+echo 注意:Windows 应用商店跳出来的"python"不是真 Python,别用它。
+echo 装完后关掉这个窗口,重新双击"一键安装.bat"。
+pause
+exit /b 1
+:pythonOk
 echo [2/6] Python 已找到
 
 echo [3/6] 安装网页依赖^(npm install,第一次要几分钟^)...
