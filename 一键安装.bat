@@ -18,16 +18,29 @@ if errorlevel 1 (
 )
 echo [1/6] Node.js 已找到
 
+for /f "tokens=1 delims=v." %%v in ('node -v') do set NODEMAJOR=%%v
+if %NODEMAJOR% lss 18 (
+  echo [Node.js 版本太旧] 需要 18 或更新版本,你当前的是:
+  node -v
+  echo 请去 https://nodejs.org/zh-cn/download 下载新版 LTS,装完重试。
+  pause
+  exit /b 1
+)
+
 set PYEXE=
-where python >nul 2>nul && set PYEXE=python
+where py >nul 2>nul && py -3 --version >nul 2>nul && set PYEXE=py -3
 if not defined PYEXE (
-  where py >nul 2>nul && set PYEXE=py
+  where python >nul 2>nul && python --version >nul 2>nul && set PYEXE=python
+)
+if not defined PYEXE (
+  where python3 >nul 2>nul && python3 --version >nul 2>nul && set PYEXE=python3
 )
 if not defined PYEXE (
   echo [缺少 Python]
   echo 请先去这里下载安装:
   echo   https://www.python.org/downloads/
   echo 安装时一定勾选 "Add python.exe to PATH"^(安装第一页底部^)!
+  echo 注意:Windows 应用商店跳出来的"python"不是真 Python,别用它。
   echo 装完后关掉这个窗口,重新双击"一键安装.bat"。
   pause
   exit /b 1
@@ -35,7 +48,7 @@ if not defined PYEXE (
 echo [2/6] Python 已找到
 
 echo [3/6] 安装网页依赖^(npm install,第一次要几分钟^)...
-call npm install
+call npm install --registry=https://registry.npmmirror.com
 if errorlevel 1 goto fail
 
 echo [4/6] 创建 Python 环境并安装组件^(第一次较久^)...
@@ -45,11 +58,15 @@ if not exist "venv\Scripts\python.exe" (
 ) else (
   echo 检测到已有 Python 环境,跳过创建
 )
-venv\Scripts\python.exe -m pip install faster-whisper https://cdn.kimi.com/agentgw/pysdk/v0.2.6/agent_gw-0.2.6-py3-none-any.whl
+venv\Scripts\python.exe -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple faster-whisper
+if errorlevel 1 goto fail
+venv\Scripts\python.exe -m pip install https://cdn.kimi.com/agentgw/pysdk/v0.2.6/agent_gw-0.2.6-py3-none-any.whl
 if errorlevel 1 goto fail
 
-set HF_ENDPOINT=https://hf-mirror.com
 echo [5/6] 下载语音识别模型^(约460MB,几分钟,只需下一次^)...
+echo 如果卡在这里超过 10 分钟,可以按 Ctrl+C 再按 Y 跳过,以后首次录音时会自动重试。
+set HF_ENDPOINT=https://hf-mirror.com
+set HF_HUB_DISABLE_XET=1
 venv\Scripts\python.exe -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8', download_root='models'); print('语音模型就绪')"
 if errorlevel 1 (
   echo 模型这次没下成^(多是网络问题^)。不影响现在使用,首次录音转写时会自动重试。

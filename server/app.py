@@ -169,6 +169,8 @@ def llm_chat(messages: list, max_tokens: int) -> str:
 # ── faster-whisper:可选组件,启动时后台线程预载模型 ──
 # 国内直连 HuggingFace 经常卡死,默认走镜像站(可用环境变量覆盖)
 os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+# 镜像站不支持 xet 加速通道(会 401),禁用 xet 走普通下载
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 whisper_model = None
 whisper_error = None
 asr_status = "unavailable"  # "loading" | "ready" | "unavailable"
@@ -763,7 +765,13 @@ def main():
         print(f"ASR 不可用: {whisper_error}", flush=True)
     if not DIST_DIR.is_dir():
         print("提示: dist/ 不存在,静态页面将 404;请先运行 npm run build", flush=True)
-    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
+    try:
+        server = ThreadingHTTPServer((HOST, PORT), Handler)
+    except OSError:
+        print(f"端口 {PORT} 被占用了:训练器可能已经在运行。", flush=True)
+        print(f"直接在浏览器打开 http://{HOST}:{PORT} 试试;确认没在运行就关掉占用该端口的程序。", flush=True)
+        sys.exit(1)
+    server.serve_forever()
 
 
 if __name__ == "__main__":
