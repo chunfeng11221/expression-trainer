@@ -7,7 +7,8 @@
 ```bash
 npm install
 python -m venv venv
-venv/Scripts/python.exe -m pip install https://cdn.kimi.com/agentgw/pysdk/v0.2.6/agent_gw-0.2.6-py3-none-any.whl faster-whisper
+# faster-whisper 用于本地语音转写;agent_gw 仅在走 Kimi agent-gw 时才需要
+venv/Scripts/python.exe -m pip install faster-whisper https://cdn.kimi.com/agentgw/pysdk/v0.2.6/agent_gw-0.2.6-py3-none-any.whl
 npm run build
 npm run server     # 启动 Python 后端,托管 dist/ + /api
 ```
@@ -22,6 +23,52 @@ npm run server     # 终端 2:Python 后端
 ```
 
 推荐使用 Chrome / Edge:录音(MediaRecorder)与实时转写(Web Speech API)依赖浏览器能力。
+
+## 接入 AI(三种方式,任选其一;不配也能跑)
+
+后端 `server/app.py` 的 LLM 提供方按优先级选择:**环境变量 > 配置文件 > Kimi agent-gw 自动探测 > 本地模式**。分析与思考提示两条调用共用同一抽象,prompt、缓存、失败降级行为不变。
+
+**方式一:环境变量(OpenAI 兼容接口,推荐)**
+
+任何兼容 OpenAI `/chat/completions` 的服务都能接(OpenAI、DeepSeek、Moonshot、通义、Ollama、LM Studio……)。支持 `AI_*` 或事实标准 `OPENAI_*` 变量名;`base_url` 末尾带不带 `/v1` 都可以。
+
+```bash
+# DeepSeek
+export AI_BASE_URL=https://api.deepseek.com
+export AI_API_KEY=sk-你的key
+export AI_MODEL=deepseek-chat
+
+# Moonshot(月之暗面)
+export AI_BASE_URL=https://api.moonshot.cn/v1
+export AI_API_KEY=sk-你的key
+export AI_MODEL=moonshot-v1-8k
+
+# OpenAI
+export AI_BASE_URL=https://api.openai.com
+export AI_API_KEY=sk-你的key
+export AI_MODEL=gpt-4o-mini
+
+# 本地 Ollama(api_key 任意填)
+export AI_BASE_URL=http://localhost:11434/v1
+export AI_API_KEY=ollama
+export AI_MODEL=qwen2.5:7b
+```
+
+**方式二:配置文件(适合不会设环境变量的人)**
+
+复制 `server/ai.config.example.json` 为 `server/ai.config.json`(已 gitignore,不会提交 key),改成你的服务:
+
+```json
+{"provider": "openai", "base_url": "https://api.deepseek.com", "api_key": "sk-你的key", "model": "deepseek-chat"}
+```
+
+`provider` 也可填 `"kimi"` 强制走 Kimi agent-gw。
+
+**方式三:什么都不配(本地模式)**
+
+没有可用 AI 时应用照常可用:分析与思考提示静默降级为本地启发式,录音、Whisper 转写、历史、对比、进步表格全部不受影响。Kimi agent-gw 用户仍可放 `~/.kimi/agent-gw.json` 或设 `KIMI_API_KEY`(自动探测,无需其他配置)。
+
+接入后可通过 `GET /api/health` 确认:`provider` 字段为 `"openai-compatible"` / `"kimi-agent-gw"` / `null`。
 
 ## 架构:混合分析 + 双路转写(全部优雅降级)
 
@@ -40,7 +87,7 @@ npm run server     # 终端 2:Python 后端
 
 **配置:**
 
-- LLM 鉴权:`KIMI_API_KEY` 环境变量 → `~/.kimi/agent-gw.json`;无 key 时后端进入"本地模式",应用照常可用。
+- LLM 接入:见上文"接入 AI"一节;无可用提供方时后端进入"本地模式",应用照常可用。
 - Whisper 模型:默认 `small`,env `WHISPER_MODEL` 覆盖;缓存在项目 `models/`;模型下载慢可设 `HF_ENDPOINT=https://hf-mirror.com`。
 - ffmpeg:env `FFMPEG_PATH` > 已知安装路径 > PATH(用于把 MediaRecorder 的 webm 转成 16kHz 单声道 wav)。
 

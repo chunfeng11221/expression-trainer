@@ -27,3 +27,4 @@ dist-ssr
 venv/
 __pycache__/
 models/
+server/ai.config.json

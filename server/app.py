@@ -53,16 +53,100 @@ def find_ffmpeg() -> str | None:
 
 FFMPEG = find_ffmpeg()
 
-# ── LLM 客户端:模块级单例 + 锁(requests.Session 非严格线程安全)──
+# ── LLM 提供方抽象 ──
+# 优先级:
+#   1. OpenAI 兼容接口:env AI_BASE_URL+AI_API_KEY+AI_MODEL(兼容 OPENAI_* 同名变量)
+#   2. 配置文件 server/ai.config.json {"provider","base_url","api_key","model"}
+#   3. Kimi agent-gw:KIMI_API_KEY 或 ~/.kimi/agent-gw.json 自动探测
+#   4. 都没有 → 本地模式(llm:false,前端自动用启发式兜底)
+import urllib.request
+
 llm_client = None
 llm_init_error = None
 llm_lock = threading.Lock()
-try:
-    from agent_gw import AgentGwClient
+llm_provider = None  # "openai-compatible" | "kimi-agent-gw" | None
+openai_cfg = None  # {"base_url","api_key","model"}
 
-    llm_client = AgentGwClient(timeout=LLM_TIMEOUT)
-except Exception as exc:  # ValueError(无 key)、ImportError(未装 SDK)等
-    llm_init_error = f"{type(exc).__name__}: {exc}"
+
+def _load_ai_config_file() -> dict:
+    path = ROOT / "server" / "ai.config.json"
+    if not path.is_file():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _init_llm_provider():
+    global llm_client, llm_init_error, llm_provider, openai_cfg
+
+    env_base = os.environ.get("AI_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
+    env_key = os.environ.get("AI_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
+    env_model = os.environ.get("AI_MODEL") or os.environ.get("OPENAI_MODEL")
+    cfg = _load_ai_config_file()
+
+    # 1. 环境变量(最高优先)
+    if env_base and env_model:
+        llm_provider = "openai-compatible"
+        openai_cfg = {"base_url": env_base, "api_key": env_key, "model": env_model}
+        return
+
+    # 2. 配置文件
+    if cfg.get("provider") == "openai" and cfg.get("base_url") and cfg.get("model"):
+        llm_provider = "openai-compatible"
+        openai_cfg = {
+            "base_url": str(cfg["base_url"]),
+            "api_key": str(cfg.get("api_key") or ""),
+            "model": str(cfg["model"]),
+        }
+        return
+
+    # 3. Kimi agent-gw(配置文件显式指定或自动探测)
+    try:
+        from agent_gw import AgentGwClient
+
+        llm_client = AgentGwClient(timeout=LLM_TIMEOUT)
+        llm_provider = "kimi-agent-gw"
+    except Exception as exc:  # ValueError(无 key)、ImportError(未装 SDK)等
+        llm_init_error = f"{type(exc).__name__}: {exc}"
+
+
+_init_llm_provider()
+
+
+def _openai_chat(messages: list, max_tokens: int) -> str:
+    """标准库 urllib 调 OpenAI 兼容 /chat/completions;失败抛异常。"""
+    base = openai_cfg["base_url"].rstrip("/")
+    if not base.endswith("/v1"):
+        base += "/v1"
+    body = json.dumps(
+        {"model": openai_cfg["model"], "messages": messages, "max_tokens": max_tokens}
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        base + "/chat/completions",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {openai_cfg['api_key']}",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=LLM_TIMEOUT) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    return data["choices"][0]["message"]["content"]
+
+
+def llm_chat(messages: list, max_tokens: int) -> str:
+    """统一 LLM 调用入口,返回 content 字符串;无可用提供方或调用失败抛异常。"""
+    if llm_provider == "openai-compatible":
+        return _openai_chat(messages, max_tokens)
+    if llm_provider == "kimi-agent-gw":
+        with llm_lock:  # requests.Session 非严格线程安全
+            resp = llm_client.chat_completion(
+                model=MODEL, messages=messages, max_tokens=max_tokens
+            )
+        return resp["choices"][0]["message"]["content"]
+    raise ValueError(f"llm unavailable: {llm_init_error or '未配置 AI 提供方'}")
 
 # ── faster-whisper:可选组件,启动时后台线程预载模型 ──
 whisper_model = None
@@ -246,20 +330,17 @@ def validate_result(data: dict) -> dict:
 
 def call_llm(payload: dict) -> dict:
     """返回 {"ok": True, "result": ...} 或 {"ok": False, "reason": ...}。"""
-    if llm_client is None:
-        return {"ok": False, "reason": f"llm unavailable: {llm_init_error}"}
+    if llm_provider is None:
+        return {"ok": False, "reason": f"llm unavailable: {llm_init_error or '未配置 AI 提供方'}"}
     started = time.time()
     try:
-        with llm_lock:
-            resp = llm_client.chat_completion(
-                model=MODEL,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": build_user_prompt(payload)},
-                ],
-                max_tokens=6000,
-            )
-        content = resp["choices"][0]["message"]["content"]
+        content = llm_chat(
+            [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": build_user_prompt(payload)},
+            ],
+            max_tokens=6000,
+        )
         result = validate_result(extract_json(content))
         return {
             "ok": True,
@@ -376,8 +457,8 @@ prep_hints_cache: dict = {}
 
 
 def call_prep_hints(payload: dict) -> dict:
-    if llm_client is None:
-        return {"ok": False, "reason": f"llm unavailable: {llm_init_error}"}
+    if llm_provider is None:
+        return {"ok": False, "reason": f"llm unavailable: {llm_init_error or '未配置 AI 提供方'}"}
     topic = str(payload.get("topic") or "").strip()
     if not topic:
         return {"ok": False, "reason": "topic 为空"}
@@ -394,16 +475,13 @@ def call_prep_hints(payload: dict) -> dict:
         "请给出思考提示,只输出 JSON 数组。"
     )
     try:
-        with llm_lock:
-            resp = llm_client.chat_completion(
-                model=MODEL,
-                messages=[
-                    {"role": "system", "content": PREP_HINTS_PROMPT},
-                    {"role": "user", "content": user},
-                ],
-                max_tokens=2000,
-            )
-        content = resp["choices"][0]["message"]["content"]
+        content = llm_chat(
+            [
+                {"role": "system", "content": PREP_HINTS_PROMPT},
+                {"role": "user", "content": user},
+            ],
+            max_tokens=2000,
+        )
         cleaned = re.sub(r"```(?:json)?", "", content)
         start = cleaned.find("[")
         end = cleaned.rfind("]")
@@ -448,7 +526,14 @@ class Handler(BaseHTTPRequestHandler):
     # ── routes ──
     def do_GET(self):
         if self.path == "/api/health":
-            self.send_json({"ok": True, "llm": llm_client is not None, "asr": asr_status})
+            self.send_json(
+                {
+                    "ok": True,
+                    "llm": llm_provider is not None,
+                    "provider": llm_provider,
+                    "asr": asr_status,
+                }
+            )
             return
         if self.path.startswith("/api/"):
             self.send_json({"ok": False, "reason": "not found"}, status=404)
@@ -509,7 +594,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    mode = "LLM 模式(kimi-for-coding)" if llm_client else f"LLM 不可用({llm_init_error})"
+    if llm_provider == "openai-compatible":
+        mode = f"LLM: OpenAI 兼容接口({openai_cfg['base_url']}, 模型 {openai_cfg['model']})"
+    elif llm_provider == "kimi-agent-gw":
+        mode = f"LLM: Kimi agent-gw({MODEL})"
+    else:
+        mode = f"LLM 不可用({llm_init_error}),本地启发式兜底"
     print(f"表达力训练器后端启动: http://{HOST}:{PORT}  [{mode}]", flush=True)
     print(f"ffmpeg: {FFMPEG or '未找到'}", flush=True)
     if asr_status == "loading":

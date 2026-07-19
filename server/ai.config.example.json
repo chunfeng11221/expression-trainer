@@ -1,0 +1,6 @@
+{
+  "provider": "openai",
+  "base_url": "https://api.deepseek.com",
+  "api_key": "sk-换成你自己的key",
+  "model": "deepseek-chat"
+}
