@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Home } from 'lucide-react'
 import type { HistoryEntry } from '../types/training'
@@ -23,34 +23,84 @@ function Delta({ value, prev, invert = false }: { value: number; prev?: number; 
   )
 }
 
-/** 极简内联 SVG 折线(综合分,按时间正序) */
-function TrendLine({ values }: { values: number[] }) {
-  if (values.length < 2) return <p className="progress-trend-empty">练满两次后,这里会出现趋势线。</p>
+const SERIES = [
+  { key: 'overallScore', label: '综合', color: '#0f766e' },
+  { key: 'viewpoint', label: '观点', color: '#5b54a6' },
+  { key: 'structure', label: '结构', color: '#b45309' },
+  { key: 'content', label: '内容', color: '#3f7a4e' },
+  { key: 'fluency', label: '流畅', color: '#8a97a5' },
+] as const
+
+type SeriesKey = (typeof SERIES)[number]['key']
+
+function seriesValue(entry: HistoryEntry, key: SeriesKey): number {
+  return key === 'overallScore' ? entry.analysis.overallScore : entry.analysis.scores[key]
+}
+
+/** 五维度折线图:纯 SVG,图例点击切换显隐,Y 轴 0-100 带刻度 */
+function TrendChart({ entries }: { entries: HistoryEntry[] }) {
+  const [hidden, setHidden] = useState<ReadonlySet<SeriesKey>>(new Set())
+  if (entries.length < 2) {
+    return <p className="progress-trend-empty">练满两次后,这里会出现趋势线。</p>
+  }
   const width = 640
-  const height = 96
-  const pad = 14
-  const min = Math.min(...values, 40)
-  const max = Math.max(...values, 90)
-  const span = Math.max(max - min, 1)
-  const points = values.map((v, i) => {
-    const x = pad + (i / (values.length - 1)) * (width - pad * 2)
-    const y = height - pad - ((v - min) / span) * (height - pad * 2)
-    return { x, y, v }
-  })
+  const height = 170
+  const padL = 32
+  const padR = 12
+  const padT = 10
+  const padB = 20
+  const x = (i: number) => padL + (i / (entries.length - 1)) * (width - padL - padR)
+  const y = (v: number) => padT + (1 - Math.max(0, Math.min(100, v)) / 100) * (height - padT - padB)
+
+  const toggle = (key: SeriesKey) =>
+    setHidden((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="trend-line" role="img" aria-label="综合分趋势">
-      <polyline
-        points={points.map((p) => `${p.x},${p.y}`).join(' ')}
-        fill="none"
-        stroke="var(--primary)"
-        strokeWidth="2"
-      />
-      {points.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r="3.5" fill="var(--primary)">
-          <title>{`第 ${i + 1} 次:${p.v} 分`}</title>
-        </circle>
-      ))}
-    </svg>
+    <div>
+      <div className="trend-legend">
+        {SERIES.map((s) => (
+          <button
+            key={s.key}
+            type="button"
+            className={`trend-legend-item ${hidden.has(s.key) ? 'legend-off' : ''}`}
+            onClick={() => toggle(s.key)}
+          >
+            <span className="legend-dot" style={{ background: s.color }} />
+            {s.label}
+          </button>
+        ))}
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="trend-chart" role="img" aria-label="五维度分数趋势">
+        {[0, 25, 50, 75, 100].map((v) => (
+          <g key={v}>
+            <line x1={padL} x2={width - padR} y1={y(v)} y2={y(v)} className="trend-grid" />
+            <text x={padL - 6} y={y(v) + 4} className="trend-axis-label" textAnchor="end">
+              {v}
+            </text>
+          </g>
+        ))}
+        {SERIES.filter((s) => !hidden.has(s.key)).map((s) => (
+          <g key={s.key}>
+            <polyline
+              points={entries.map((e, i) => `${x(i)},${y(seriesValue(e, s.key))}`).join(' ')}
+              fill="none"
+              stroke={s.color}
+              strokeWidth={s.key === 'overallScore' ? 2.5 : 1.5}
+            />
+            {entries.map((e, i) => (
+              <circle key={e.id} cx={x(i)} cy={y(seriesValue(e, s.key))} r={s.key === 'overallScore' ? 3.5 : 2.5} fill={s.color}>
+                <title>{`${formatDateTime(e.savedAt)} ${s.label}:${seriesValue(e, s.key)}`}</title>
+              </circle>
+            ))}
+          </g>
+        ))}
+      </svg>
+    </div>
   )
 }
 
@@ -128,8 +178,8 @@ export default function ProgressPage() {
       </section>
 
       <section className="result-section">
-        <h2>综合分趋势</h2>
-        <TrendLine values={asc.map((e) => e.analysis.overallScore)} />
+        <h2>五维度趋势</h2>
+        <TrendChart entries={asc} />
       </section>
 
       <section className="result-section">

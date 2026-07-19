@@ -54,8 +54,7 @@ export async function analyzeWithAI(input: AIAnalyzeInput): Promise<AnalysisResu
 /**
  * 准备阶段:请求 AI 生成针对题目的 3-4 条思考提示。
  * 只给思考角度/切入方向;失败返回 null,调用方保持默认提示。
- */
-export async function fetchPrepHints(input: {
+ */export async function fetchPrepHints(input: {
   topic: string
   category?: string
   scenario: string
@@ -194,4 +193,82 @@ function mergeResult(
     detectedStructure,
     source: 'ai',
   }
+}
+
+/* ---------- AI 接入配置(设置页) ---------- */
+
+export interface AiConfigInfo {
+  provider: string | null
+  source: string | null
+  base_url: string | null
+  model: string | null
+  key_tail: string | null
+  env_override: boolean
+}
+
+export async function fetchAiConfig(): Promise<AiConfigInfo | null> {
+  try {
+    const res = await fetch('/api/config')
+    if (!res.ok) return null
+    const data: unknown = await res.json()
+    if (typeof data !== 'object' || data === null || (data as { ok?: unknown }).ok !== true) {
+      return null
+    }
+    return data as AiConfigInfo
+  } catch {
+    return null
+  }
+}
+
+export interface HealthInfo {
+  llm: boolean
+  provider: string | null
+}
+
+export async function fetchHealth(): Promise<HealthInfo | null> {
+  try {
+    const res = await fetch('/api/health')
+    if (!res.ok) return null
+    const data: unknown = await res.json()
+    if (typeof data !== 'object' || data === null) return null
+    const d = data as { llm?: unknown; provider?: unknown }
+    return { llm: d.llm === true, provider: typeof d.provider === 'string' ? d.provider : null }
+  } catch {
+    return null
+  }
+}
+
+export interface AiConfigSavePayload {
+  provider: 'openai' | 'kimi'
+  base_url?: string
+  api_key?: string
+  model?: string
+}
+
+async function postJson(path: string, payload: unknown): Promise<{ ok: boolean; reason?: string; model?: string }> {
+  try {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const data: unknown = await res.json()
+    if (typeof data !== 'object' || data === null) return { ok: false, reason: '响应格式错误' }
+    const d = data as { ok?: unknown; reason?: unknown; model?: unknown }
+    return {
+      ok: d.ok === true,
+      reason: typeof d.reason === 'string' ? d.reason : undefined,
+      model: typeof d.model === 'string' ? d.model : undefined,
+    }
+  } catch {
+    return { ok: false, reason: '无法连接后端服务' }
+  }
+}
+
+export function saveAiConfig(payload: AiConfigSavePayload) {
+  return postJson('/api/config', payload)
+}
+
+export function testAiConfig(payload: { base_url?: string; api_key?: string; model?: string }) {
+  return postJson('/api/config/test', payload)
 }

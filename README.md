@@ -2,38 +2,32 @@
 
 一分钟口头表达训练:拿到题目 → 准备 15 秒 → 录音 1 分钟 → 语音转文字 → AI 分析口癖/观点/结构/内容 → 具体反馈 → 同题再说一次 → 对比两次变化。
 
-## 启动(生产模式,单进程)
+## 快速开始
 
 ```bash
 npm install
 python -m venv venv
 # faster-whisper 用于本地语音转写;agent_gw 仅在走 Kimi agent-gw 时才需要
 venv/Scripts/python.exe -m pip install faster-whisper https://cdn.kimi.com/agentgw/pysdk/v0.2.6/agent_gw-0.2.6-py3-none-any.whl
-npm run build
-npm run server     # 启动 Python 后端,托管 dist/ + /api
+npm start          # = npm run build + 启动后端
 ```
 
-浏览器打开 http://127.0.0.1:8788(`npm start` = build + server 一步完成)。
+浏览器打开 http://127.0.0.1:8788 → 点右下角"修改"进设置 → 在 **AI 接入** 区块粘贴你的 API key(默认 DeepSeek,填 key 即可)→ 「测试连接」→ 回到首页开练。**不配 AI 也能用**,分析会静默降级为本地启发式。
 
-## 启动(开发模式)
-
-```bash
-npm run dev        # 终端 1:vite dev server,/api 已配置 proxy 到 8788
-npm run server     # 终端 2:Python 后端
-```
-
-推荐使用 Chrome / Edge:录音(MediaRecorder)与实时转写(Web Speech API)依赖浏览器能力。
+开发模式:`npm run dev`(终端 1,/api 已 proxy)+ `npm run server`(终端 2)。推荐 Chrome / Edge:录音(MediaRecorder)与实时转写(Web Speech API)依赖浏览器能力。
 
 ## 接入 AI(三种方式,任选其一;不配也能跑)
 
-后端 `server/app.py` 的 LLM 提供方按优先级选择:**环境变量 > 配置文件 > Kimi agent-gw 自动探测 > 本地模式**。分析与思考提示两条调用共用同一抽象,prompt、缓存、失败降级行为不变。
+**方式一:界面配置(推荐,无需碰环境变量)**
 
-**方式一:环境变量(OpenAI 兼容接口,推荐)**
+设置页 → AI 接入:选 DeepSeek(自动填好 `https://api.deepseek.com` / `deepseek-chat`)/ Kimi(agent-gw)/ 自定义 OpenAI 兼容,粘贴 key → 测试连接 → 保存。配置写入 `server/ai.config.json`(已 gitignore)并**热切换,无需重启**;key 在界面上只回显末 4 位,日志不打印。
 
-任何兼容 OpenAI `/chat/completions` 的服务都能接(OpenAI、DeepSeek、Moonshot、通义、Ollama、LM Studio……)。支持 `AI_*` 或事实标准 `OPENAI_*` 变量名;`base_url` 末尾带不带 `/v1` 都可以。
+**方式二:环境变量(OpenAI 兼容接口)**
+
+任何兼容 OpenAI `/chat/completions` 的服务都能接(OpenAI、DeepSeek、Moonshot、通义、Ollama、LM Studio……)。支持 `AI_*` 或事实标准 `OPENAI_*` 变量名;`base_url` 末尾带不带 `/v1` 都可以。优先级高于界面保存的配置。
 
 ```bash
-# DeepSeek
+# DeepSeek(推荐默认)
 export AI_BASE_URL=https://api.deepseek.com
 export AI_API_KEY=sk-你的key
 export AI_MODEL=deepseek-chat
@@ -54,21 +48,11 @@ export AI_API_KEY=ollama
 export AI_MODEL=qwen2.5:7b
 ```
 
-**方式二:配置文件(适合不会设环境变量的人)**
-
-复制 `server/ai.config.example.json` 为 `server/ai.config.json`(已 gitignore,不会提交 key),改成你的服务:
-
-```json
-{"provider": "openai", "base_url": "https://api.deepseek.com", "api_key": "sk-你的key", "model": "deepseek-chat"}
-```
-
-`provider` 也可填 `"kimi"` 强制走 Kimi agent-gw。
-
 **方式三:什么都不配(本地模式)**
 
-没有可用 AI 时应用照常可用:分析与思考提示静默降级为本地启发式,录音、Whisper 转写、历史、对比、进步表格全部不受影响。Kimi agent-gw 用户仍可放 `~/.kimi/agent-gw.json` 或设 `KIMI_API_KEY`(自动探测,无需其他配置)。
+没有可用 AI 时应用照常可用:分析与思考提示静默降级为本地启发式,录音、Whisper 转写、历史、对比、进步表格全部不受影响。Kimi agent-gw 用户仍可放 `~/.kimi/agent-gw.json` 或设 `KIMI_API_KEY`(自动探测)。
 
-接入后可通过 `GET /api/health` 确认:`provider` 字段为 `"openai-compatible"` / `"kimi-agent-gw"` / `null`。
+后端 LLM 提供方在**启动时**按优先级选择:**环境变量 > 配置文件 > Kimi agent-gw 自动探测 > 本地模式**;界面保存配置则**立即热切换生效**(但重启后环境变量仍优先)。接入后可通过 `GET /api/health` 确认:`provider` 字段为 `"openai-compatible"` / `"kimi-agent-gw"` / `null`;`GET /api/config` 查看当前配置(key 只回末 4 位)。
 
 ## 架构:混合分析 + 双路转写(全部优雅降级)
 

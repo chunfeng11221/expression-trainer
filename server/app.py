@@ -66,20 +66,30 @@ llm_init_error = None
 llm_lock = threading.Lock()
 llm_provider = None  # "openai-compatible" | "kimi-agent-gw" | None
 openai_cfg = None  # {"base_url","api_key","model"}
+llm_source = None  # "env" | "file" | "agent-gw" | None
+
+AI_CONFIG_PATH = ROOT / "server" / "ai.config.json"
 
 
 def _load_ai_config_file() -> dict:
-    path = ROOT / "server" / "ai.config.json"
-    if not path.is_file():
+    if not AI_CONFIG_PATH.is_file():
         return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(AI_CONFIG_PATH.read_text(encoding="utf-8"))
     except Exception:
         return {}
 
 
+def _apply_openai_config(base_url: str, api_key: str, model: str, source: str):
+    global llm_provider, openai_cfg, llm_source, llm_init_error
+    llm_provider = "openai-compatible"
+    openai_cfg = {"base_url": base_url, "api_key": api_key, "model": model}
+    llm_source = source
+    llm_init_error = None
+
+
 def _init_llm_provider():
-    global llm_client, llm_init_error, llm_provider, openai_cfg
+    global llm_client, llm_init_error, llm_provider, llm_source
 
     env_base = os.environ.get("AI_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
     env_key = os.environ.get("AI_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
@@ -88,18 +98,14 @@ def _init_llm_provider():
 
     # 1. 环境变量(最高优先)
     if env_base and env_model:
-        llm_provider = "openai-compatible"
-        openai_cfg = {"base_url": env_base, "api_key": env_key, "model": env_model}
+        _apply_openai_config(env_base, env_key, env_model, "env")
         return
 
     # 2. 配置文件
     if cfg.get("provider") == "openai" and cfg.get("base_url") and cfg.get("model"):
-        llm_provider = "openai-compatible"
-        openai_cfg = {
-            "base_url": str(cfg["base_url"]),
-            "api_key": str(cfg.get("api_key") or ""),
-            "model": str(cfg["model"]),
-        }
+        _apply_openai_config(
+            str(cfg["base_url"]), str(cfg.get("api_key") or ""), str(cfg["model"]), "file"
+        )
         return
 
     # 3. Kimi agent-gw(配置文件显式指定或自动探测)
@@ -108,6 +114,7 @@ def _init_llm_provider():
 
         llm_client = AgentGwClient(timeout=LLM_TIMEOUT)
         llm_provider = "kimi-agent-gw"
+        llm_source = "agent-gw"
     except Exception as exc:  # ValueError(无 key)、ImportError(未装 SDK)等
         llm_init_error = f"{type(exc).__name__}: {exc}"
 
@@ -116,24 +123,35 @@ _init_llm_provider()
 
 
 def _openai_chat(messages: list, max_tokens: int) -> str:
-    """标准库 urllib 调 OpenAI 兼容 /chat/completions;失败抛异常。"""
+    """标准库 urllib 调 OpenAI 兼容 /chat/completions;失败抛异常。
+    优先带 response_format=json_object(DeepSeek 等支持,保证 JSON 合法);
+    服务不支持(400)时自动降级重试不带。"""
     base = openai_cfg["base_url"].rstrip("/")
     if not base.endswith("/v1"):
         base += "/v1"
-    body = json.dumps(
-        {"model": openai_cfg["model"], "messages": messages, "max_tokens": max_tokens}
-    ).encode("utf-8")
-    req = urllib.request.Request(
-        base + "/chat/completions",
-        data=body,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {openai_cfg['api_key']}",
-        },
-    )
-    with urllib.request.urlopen(req, timeout=LLM_TIMEOUT) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-    return data["choices"][0]["message"]["content"]
+    url = base + "/chat/completions"
+
+    def post(payload: dict) -> str:
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {openai_cfg['api_key']}",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=LLM_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return data["choices"][0]["message"]["content"]
+
+    payload = {"model": openai_cfg["model"], "messages": messages, "max_tokens": max_tokens}
+    try:
+        return post({**payload, "response_format": {"type": "json_object"}})
+    except urllib.error.HTTPError as exc:
+        if exc.code != 400:
+            raise
+        return post(payload)
 
 
 def llm_chat(messages: list, max_tokens: int) -> str:
@@ -191,23 +209,37 @@ CONTENT_TYPES = {
     ".map": "application/json; charset=utf-8",
 }
 
-SYSTEM_PROMPT = """你是一位严格而友善的口头表达教练,正在点评一段一分钟口头表达的文字稿。
-要求:
-1. 只输出一个 JSON 对象,不要输出 markdown 代码围栏以外的任何文字、解释或前后缀。
-2. 全部使用中文,措辞精炼。
-3. 输出 JSON 的结构必须是:
+SYSTEM_PROMPT = """你是一位严格而友善的口头表达教练,正在点评一段一分钟口头表达的文字稿。全部使用中文。
+
+【输出格式】只输出一个 JSON 对象,不要输出 markdown 代码围栏以外的任何文字、解释或前后缀:
 {"scores":{"viewpoint":int,"structure":int,"content":int,"fluency":int},
- "summary":"一句话诊断,80字以内",
+ "summary":"一句话诊断",
  "strengths":[{"title":"","description":"","suggestion":"","transcriptQuote":""}],
  "improvements":[{"title":"","description":"","suggestion":"","transcriptQuote":""}],
  "improvedOutline":["..."],
  "detectedStructure":""}
-4. 四项评分为 0-100 的整数,客观校准:普通水平的即兴表达大多在 55-80 分,不要虚高。
-5. strengths 恰好 2 条;improvements 恰好 2 条。title 12 字以内,description 和 suggestion 各 60 字以内且必须具体,指出问题时说清怎么改。
-6. transcriptQuote 必须是用户文字稿的原文子串,逐字摘录,不要改写、不要补标点;找不到合适引用时该字段给空字符串。
-7. improvedOutline 最多 5 条,每条 30 字以内,基于用户原有的观点重组出更清晰的第二次回答提纲;不要替用户换观点,不要给完美范文。
-8. detectedStructure 从「观点—理由—例子—总结 / 问题—原因—解决办法 / 现象—分析—结论 / 背景—行动—结果 / 无明显结构」中选一个,或用不超过 12 个字简短描述。
-9. 我会提供本地统计指标(口癖次数、语速、观点出现时间等),fluency 评分必须与这些数据一致:口癖超过 10 次或语速明显异常时 fluency 不应高于 65。"""
+
+【评分锚点(0-100 整数,四个维度通用,含义按题型解释)】
+- 90-100:可以直接讲给真实听众,只有瑕疵没有硬伤
+- 75-89:主干成立,有 1-2 个明显可改之处
+- 60-74:能听但明显粗糙,关键要素缺失或组织混乱
+- 低于 60:内容空洞、离题、逻辑断裂或信息严重不足——该低就低,不要和稀泥
+
+【数据一致性硬约束(我会提供准确的本地统计)】
+- 口癖 ≥8 次 → fluency 不高于 70;≥15 次 → 不高于 60
+- 核心观点/核心信息出现在 2/3 时长之后 → viewpoint 不高于 65;完全没出现 → 不高于 55
+- 无例子也无数字 → content 不高于 70;空话套话密集 → 不高于 60
+- 无明确结尾 → structure 不高于 70
+- 语速低于 120 或高于 320 字/分钟 → fluency 不高于 65
+
+【写法要求】
+- summary 固定句式:先肯定一个真实优点,再指出最关键的一个问题,一两句话,80 字以内。
+- strengths 恰好 2 条(做得最好的两点);improvements 恰好 2 条(最关键的问题,不要罗列一堆)。
+- title 12 字以内;description 和 suggestion 各 60 字以内且必须具体。
+- suggestion 必须可操作:说清具体怎么改;禁止"注意一下""多加练习"这类正确的废话。
+- transcriptQuote 必须是用户文字稿的原文子串,逐字摘录,不要改写、不要补标点;找不到合适引用时给空字符串。
+- improvedOutline 最多 5 条,每条 30 字以内,基于用户原有观点重组出更清晰的第二次提纲;不替用户换观点,不给完美范文。
+- detectedStructure 从「观点—理由—例子—总结 / 问题—原因—解决办法 / 现象—分析—结论 / 背景—行动—结果 / 无明显结构」中选一个,或用不超过 12 个字简短描述。"""
 
 
 # 题型化评判标准(维度名不变,但"观点"的含义按题型解释)
@@ -334,12 +366,14 @@ def call_llm(payload: dict) -> dict:
         return {"ok": False, "reason": f"llm unavailable: {llm_init_error or '未配置 AI 提供方'}"}
     started = time.time()
     try:
+        # 非推理模型(DeepSeek 等)不需要为推理 token 预留大 max_tokens
+        mt = 6000 if llm_provider == "kimi-agent-gw" else 2000
         content = llm_chat(
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": build_user_prompt(payload)},
             ],
-            max_tokens=6000,
+            max_tokens=mt,
         )
         result = validate_result(extract_json(content))
         return {
@@ -450,7 +484,8 @@ PREP_HINTS_PROMPT = """你是一位口头表达教练。用户即将就一道题
 2. 每条提示不超过 30 字。
 3. 提示只能是思考角度、提问或切入方向(例如"先想清楚:你见过努力但没回报的例子吗?")。
 4. 严禁给出答案、立场、论点、提纲或演讲稿内容——不要替用户思考,只提醒他该想什么。
-5. 结合题目类型与受众,提示要具体、有针对性,不要放之四海皆准的套话。"""
+5. 结合题目类型与受众,提示要具体、有针对性,不要放之四海皆准的套话。
+6. 每条尽量用提问形式,或以"先想清楚/先回忆/先确认"开头;不要写成指令或结论。"""
 
 # prep-hints 内存缓存:同 topic+settings 不重复调 LLM
 prep_hints_cache: dict = {}
@@ -480,7 +515,7 @@ def call_prep_hints(payload: dict) -> dict:
                 {"role": "system", "content": PREP_HINTS_PROMPT},
                 {"role": "user", "content": user},
             ],
-            max_tokens=2000,
+            max_tokens=2000 if llm_provider == "kimi-agent-gw" else 1000,
         )
         cleaned = re.sub(r"```(?:json)?", "", content)
         start = cleaned.find("[")
@@ -496,6 +531,104 @@ def call_prep_hints(payload: dict) -> dict:
         result = {"ok": True, "hints": hints}
         prep_hints_cache[key] = result
         return result
+    except Exception as exc:
+        return {"ok": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+
+# ── AI 配置 API(界面内配置 key,运行时热切换,日志永不打印 key)──
+
+
+def _mask_key(key: str) -> str | None:
+    if not key:
+        return None
+    return f"…{key[-4:]}" if len(key) > 4 else "…"
+
+
+def get_config_payload() -> dict:
+    return {
+        "ok": True,
+        "provider": llm_provider,
+        "source": llm_source,
+        "base_url": openai_cfg["base_url"] if openai_cfg else None,
+        "model": openai_cfg["model"] if openai_cfg else None,
+        "key_tail": _mask_key(openai_cfg["api_key"]) if openai_cfg else None,
+        "env_override": bool(
+            (os.environ.get("AI_BASE_URL") or os.environ.get("OPENAI_BASE_URL"))
+            and (os.environ.get("AI_MODEL") or os.environ.get("OPENAI_MODEL"))
+        ),
+    }
+
+
+def save_config(payload: dict) -> dict:
+    """写入 server/ai.config.json 并热切换 provider(不重启)。"""
+    global llm_client, llm_init_error
+    provider = str(payload.get("provider") or "openai")
+    if provider == "kimi":
+        try:
+            from agent_gw import AgentGwClient
+
+            llm_client = AgentGwClient(timeout=LLM_TIMEOUT)
+            globals()["llm_provider"] = "kimi-agent-gw"
+            globals()["llm_source"] = "agent-gw"
+            llm_init_error = None
+            prep_hints_cache.clear()
+            return {"ok": True}
+        except Exception as exc:
+            return {"ok": False, "reason": f"agent-gw 不可用: {type(exc).__name__}: {exc}"}
+    base_url = str(payload.get("base_url") or "").strip()
+    api_key = str(payload.get("api_key") or "").strip()
+    model = str(payload.get("model") or "").strip()
+    if not base_url or not model:
+        return {"ok": False, "reason": "base_url 和 model 必填"}
+    if not api_key:
+        # 没填新 key 时沿用已保存的(避免界面回显掩码覆盖真 key)
+        api_key = (openai_cfg or {}).get("api_key", "")
+    cfg = {"provider": "openai", "base_url": base_url, "api_key": api_key, "model": model}
+    try:
+        AI_CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as exc:
+        return {"ok": False, "reason": f"写入配置失败: {exc}"}
+    _apply_openai_config(base_url, api_key, model, "file")
+    prep_hints_cache.clear()
+    return {"ok": True}
+
+
+def test_config(payload: dict) -> dict:
+    """用传入(或已存)配置发最小请求,返回成败。不持久化任何内容。"""
+    base_url = str(payload.get("base_url") or (openai_cfg or {}).get("base_url") or "").strip()
+    api_key = str(payload.get("api_key") or (openai_cfg or {}).get("api_key") or "").strip()
+    model = str(payload.get("model") or (openai_cfg or {}).get("model") or "").strip()
+    if not base_url or not model:
+        return {"ok": False, "reason": "请先填写 base_url 和 model"}
+    base = base_url.rstrip("/")
+    if not base.endswith("/v1"):
+        base += "/v1"
+    body = json.dumps(
+        {
+            "model": model,
+            "messages": [{"role": "user", "content": "回复 JSON:{\"ok\":true}"}],
+            "max_tokens": 50,
+        }
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        base + "/chat/completions",
+        data=body,
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        content = data["choices"][0]["message"]["content"]
+        if not content:
+            raise ValueError("返回内容为空")
+        return {"ok": True, "model": model}
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", "ignore")[:150]
+        except Exception:
+            pass
+        return {"ok": False, "reason": f"HTTP {exc.code}: {detail or exc.reason}"}
     except Exception as exc:
         return {"ok": False, "reason": f"{type(exc).__name__}: {exc}"}
 
@@ -535,6 +668,9 @@ class Handler(BaseHTTPRequestHandler):
                 }
             )
             return
+        if self.path == "/api/config":
+            self.send_json(get_config_payload())
+            return
         if self.path.startswith("/api/"):
             self.send_json({"ok": False, "reason": "not found"}, status=404)
             return
@@ -559,6 +695,22 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": False, "reason": f"bad request: {exc}"})
                 return
             self.send_json(call_prep_hints(payload))
+            return
+        if self.path == "/api/config":
+            try:
+                payload = json.loads(self.read_body().decode("utf-8"))
+            except Exception as exc:
+                self.send_json({"ok": False, "reason": f"bad request: {exc}"})
+                return
+            self.send_json(save_config(payload))
+            return
+        if self.path == "/api/config/test":
+            try:
+                payload = json.loads(self.read_body().decode("utf-8"))
+            except Exception as exc:
+                self.send_json({"ok": False, "reason": f"bad request: {exc}"})
+                return
+            self.send_json(test_config(payload))
             return
         if self.path == "/api/transcribe":
             try:

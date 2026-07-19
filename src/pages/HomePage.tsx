@@ -1,6 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { LayoutList, Shuffle } from 'lucide-react'
 import { getRandomTopic } from '../data/topics'
+import { fetchHealth } from '../services/aiAnalysisService'
 import { loadAttempts, loadSession, loadSettings, saveSession } from '../utils/storage'
 
 function formatSeconds(seconds: number): string {
@@ -12,6 +14,11 @@ export default function HomePage() {
   const settings = loadSettings()
   const session = loadSession()
   const attempts = loadAttempts()
+  const [llmReady, setLlmReady] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    void fetchHealth().then((h) => setLlmReady(h ? h.llm : null))
+  }, [])
 
   const startRandom = () => {
     saveSession({
@@ -54,6 +61,11 @@ export default function HomePage() {
         当前默认:{formatSeconds(settings.answerSeconds)}表达 · {formatSeconds(settings.prepareSeconds)}
         准备 · {settings.scene} · {settings.audience} <Link to="/settings">修改</Link>
       </p>
+      {llmReady === false && (
+        <p className="home-ai-hint">
+          <Link to="/settings">配置 AI 获得完整反馈</Link>
+        </p>
+      )}
 
       <p className="home-footer">
         <Link to="/history">训练历史</Link>
