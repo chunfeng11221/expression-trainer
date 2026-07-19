@@ -363,6 +363,65 @@ def transcribe_audio(raw: bytes, content_type: str) -> dict:
                     pass
 
 
+PREP_HINTS_PROMPT = """你是一位口头表达教练。用户即将就一道题目做一分钟口头表达,请给出 3-4 条思考提示,帮助他在 15 秒内组织思路。
+严格要求:
+1. 只输出一个 JSON 数组,例如 ["提示一","提示二","提示三"],不要输出任何其他文字。
+2. 每条提示不超过 30 字。
+3. 提示只能是思考角度、提问或切入方向(例如"先想清楚:你见过努力但没回报的例子吗?")。
+4. 严禁给出答案、立场、论点、提纲或演讲稿内容——不要替用户思考,只提醒他该想什么。
+5. 结合题目类型与受众,提示要具体、有针对性,不要放之四海皆准的套话。"""
+
+# prep-hints 内存缓存:同 topic+settings 不重复调 LLM
+prep_hints_cache: dict = {}
+
+
+def call_prep_hints(payload: dict) -> dict:
+    if llm_client is None:
+        return {"ok": False, "reason": f"llm unavailable: {llm_init_error}"}
+    topic = str(payload.get("topic") or "").strip()
+    if not topic:
+        return {"ok": False, "reason": "topic 为空"}
+    key = (
+        topic,
+        str(payload.get("category") or ""),
+        str(payload.get("scenario") or ""),
+        str(payload.get("audience") or ""),
+    )
+    if key in prep_hints_cache:
+        return prep_hints_cache[key]
+    user = (
+        f"题目:{topic}\n题型:{key[1] or '通用'};场景:{key[2] or '汇报'};受众:{key[3] or '普通观众'}\n"
+        "请给出思考提示,只输出 JSON 数组。"
+    )
+    try:
+        with llm_lock:
+            resp = llm_client.chat_completion(
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": PREP_HINTS_PROMPT},
+                    {"role": "user", "content": user},
+                ],
+                max_tokens=2000,
+            )
+        content = resp["choices"][0]["message"]["content"]
+        cleaned = re.sub(r"```(?:json)?", "", content)
+        start = cleaned.find("[")
+        end = cleaned.rfind("]")
+        if start == -1 or end == -1 or end <= start:
+            raise ValueError("输出中没有 JSON 数组")
+        hints = json.loads(cleaned[start : end + 1])
+        if not isinstance(hints, list):
+            raise ValueError("不是数组")
+        hints = [str(h).strip()[:40] for h in hints if str(h).strip()][:4]
+        if len(hints) < 3:
+            raise ValueError("提示不足 3 条")
+        result = {"ok": True, "hints": hints}
+        prep_hints_cache[key] = result
+        return result
+    except Exception as exc:
+        return {"ok": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     # 转写耗时较长(CPU small 模型 60s 音频约 20-60s),读超时放宽
@@ -407,6 +466,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": False, "reason": "transcript 为空"})
                 return
             self.send_json(call_llm(payload))
+            return
+        if self.path == "/api/prep-hints":
+            try:
+                payload = json.loads(self.read_body().decode("utf-8"))
+            except Exception as exc:
+                self.send_json({"ok": False, "reason": f"bad request: {exc}"})
+                return
+            self.send_json(call_prep_hints(payload))
             return
         if self.path == "/api/transcribe":
             try:

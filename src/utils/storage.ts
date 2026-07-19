@@ -43,7 +43,18 @@ export function saveSettings(settings: TrainingSettings): void {
 }
 
 export function loadSession(): TrainingSession | null {
-  return readJson<TrainingSession>(KEYS.session)
+  const session = readJson<TrainingSession>(KEYS.session)
+  // 数据损坏(合法 JSON 但形状不对)时当作没有 session,避免页面崩溃
+  if (
+    !session ||
+    typeof session !== 'object' ||
+    typeof session.topic !== 'object' ||
+    session.topic === null ||
+    typeof session.topic.title !== 'string'
+  ) {
+    return null
+  }
+  return session
 }
 
 export function saveSession(session: TrainingSession): void {
@@ -63,8 +74,24 @@ export interface StoredAttempts {
   second?: Attempt
 }
 
+function isValidAttempt(value: unknown): value is Attempt {
+  if (typeof value !== 'object' || value === null) return false
+  const a = value as Partial<Attempt>
+  return (
+    typeof a.transcriptText === 'string' &&
+    typeof a.analysis === 'object' &&
+    a.analysis !== null &&
+    typeof a.analysis.overallScore === 'number'
+  )
+}
+
 export function loadAttempts(): StoredAttempts {
-  return readJson<StoredAttempts>(KEYS.attempts) ?? {}
+  const raw = readJson<StoredAttempts>(KEYS.attempts)
+  if (typeof raw !== 'object' || raw === null) return {}
+  return {
+    first: isValidAttempt(raw.first) ? raw.first : undefined,
+    second: isValidAttempt(raw.second) ? raw.second : undefined,
+  }
 }
 
 /** 保存一次尝试;保存第一次时会清掉旧的第二次,开启新一轮对比 */
@@ -75,15 +102,6 @@ export function saveAttempt(attempt: Attempt): void {
   } else {
     writeJson(KEYS.attempts, { ...stored, second: attempt })
   }
-}
-
-/** 覆盖更新已存在的 attempt 且保留另一次(用于 AI 分析结果回填) */
-export function updateAttempt(attempt: Attempt): void {
-  const stored = loadAttempts()
-  writeJson(KEYS.attempts, {
-    ...stored,
-    [attempt.attemptNumber === 1 ? 'first' : 'second']: attempt,
-  })
 }
 
 export function clearAttempts(): void {
@@ -98,7 +116,16 @@ export function clearAttempts(): void {
 
 export function loadHistory(): HistoryEntry[] {
   const list = readJson<HistoryEntry[]>(KEYS.history)
-  return Array.isArray(list) ? list : []
+  if (!Array.isArray(list)) return []
+  // 过滤损坏条目,避免历史页/表格页渲染崩溃
+  return list.filter(
+    (e) =>
+      typeof e === 'object' &&
+      e !== null &&
+      typeof e.id === 'string' &&
+      typeof e.topic?.title === 'string' &&
+      typeof e.analysis?.overallScore === 'number',
+  )
 }
 
 export function getHistoryEntry(id: string): HistoryEntry | null {

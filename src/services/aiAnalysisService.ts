@@ -51,6 +51,42 @@ export async function analyzeWithAI(input: AIAnalyzeInput): Promise<AnalysisResu
   }
 }
 
+/**
+ * 准备阶段:请求 AI 生成针对题目的 3-4 条思考提示。
+ * 只给思考角度/切入方向;失败返回 null,调用方保持默认提示。
+ */
+export async function fetchPrepHints(input: {
+  topic: string
+  category?: string
+  scenario: string
+  audience: string
+}): Promise<string[] | null> {
+  try {
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), 30_000)
+    let res: Response
+    try {
+      res = await fetch('/api/prep-hints', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+        signal: controller.signal,
+      })
+    } finally {
+      window.clearTimeout(timer)
+    }
+    if (!res.ok) return null
+    const data: unknown = await res.json()
+    if (typeof data !== 'object' || data === null) return null
+    const d = data as { ok?: unknown; hints?: unknown }
+    if (d.ok !== true || !Array.isArray(d.hints)) return null
+    const hints = d.hints.filter((x): x is string => typeof x === 'string' && !!x.trim()).slice(0, 4)
+    return hints.length >= 3 ? hints : null
+  } catch {
+    return null
+  }
+}
+
 function isAnalyzeResponse(data: unknown): data is { ok: true; result: LlmResult } {
   return (
     typeof data === 'object' &&

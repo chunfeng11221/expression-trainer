@@ -4,7 +4,7 @@ import { Play } from 'lucide-react'
 import AudioRecorder from '../components/AudioRecorder'
 import Countdown from '../components/Countdown'
 import { mockTranscript, mockTranscriptImproved } from '../data/mockAnalysis'
-import { analyzeWithAI } from '../services/aiAnalysisService'
+import { analyzeWithAI, fetchPrepHints } from '../services/aiAnalysisService'
 import type { AsrSegment, WordTimestamp } from '../services/analysisService'
 import {
   SpeechTranscriber,
@@ -48,12 +48,33 @@ export default function TrainingPage() {
   const [resetKey, setResetKey] = useState(0)
   const [liveSegments, setLiveSegments] = useState<LiveSegment[]>([])
   const [interim, setInterim] = useState('')
+  const [tips, setTips] = useState<string[]>(THINKING_TIPS)
   const transcriberRef = useRef<SpeechTranscriber | null>(null)
 
   const improvementGoals = useMemo(() => {
     if (session?.attemptNumber !== 2) return []
     return loadAttempts().first?.analysis.improvements.map((i) => i.title) ?? []
   }, [session?.attemptNumber])
+
+  // 准备阶段:先显示默认四条提示,后台请求 AI 的针对性提示,返回后静默替换。
+  // 准备时间为 0 时直接进录音,不发请求。
+  useEffect(() => {
+    if (!session || phase !== 'preparing' || settings.prepareSeconds === 0) return
+    setTips(THINKING_TIPS)
+    let cancelled = false
+    void fetchPrepHints({
+      topic: session.topic.title,
+      category: session.topic.category,
+      scenario: settings.scene,
+      audience: settings.audience,
+    }).then((hints) => {
+      if (!cancelled && hints) setTips(hints)
+    })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.topic.id, phase, settings.prepareSeconds])
 
   // 准备时间为 0 时直接进录音
   useEffect(() => {
@@ -228,9 +249,9 @@ export default function TrainingPage() {
       <Countdown seconds={settings.prepareSeconds} onComplete={startRecording} />
 
       <div className="tips-box">
-        <h2>用这 15 秒只想四件事</h2>
+        <h2>用这 15 秒只想这几件事</h2>
         <ol>
-          {THINKING_TIPS.map((tip) => (
+          {tips.map((tip) => (
             <li key={tip}>{tip}</li>
           ))}
         </ol>
