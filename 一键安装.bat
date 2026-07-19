@@ -48,6 +48,7 @@ if not exist "venv\Scripts\python.exe" (
 venv\Scripts\python.exe -m pip install faster-whisper https://cdn.kimi.com/agentgw/pysdk/v0.2.6/agent_gw-0.2.6-py3-none-any.whl
 if errorlevel 1 goto fail
 
+set HF_ENDPOINT=https://hf-mirror.com
 echo [5/6] 下载语音识别模型^(约460MB,几分钟,只需下一次^)...
 venv\Scripts\python.exe -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8', download_root='models'); print('语音模型就绪')"
 if errorlevel 1 (

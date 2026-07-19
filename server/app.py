@@ -167,6 +167,8 @@ def llm_chat(messages: list, max_tokens: int) -> str:
     raise ValueError(f"llm unavailable: {llm_init_error or '未配置 AI 提供方'}")
 
 # ── faster-whisper:可选组件,启动时后台线程预载模型 ──
+# 国内直连 HuggingFace 经常卡死,默认走镜像站(可用环境变量覆盖)
+os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 whisper_model = None
 whisper_error = None
 asr_status = "unavailable"  # "loading" | "ready" | "unavailable"
