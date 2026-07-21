@@ -186,17 +186,75 @@ except Exception as exc:
 def preload_whisper():
     global whisper_model, whisper_error, asr_status
     try:
-        model = WhisperModel(
-            WHISPER_MODEL_NAME,
-            device="cpu",
-            compute_type="int8",
-            download_root=str(MODELS_DIR),
-        )
+        model = load_whisper_model()
         whisper_model = model
         asr_status = "ready"
     except Exception as exc:
         whisper_error = f"{type(exc).__name__}: {exc}"
         asr_status = "unavailable"
+
+
+# ModelScope(国内可达)的 faster-whisper 模型文件
+MS_MODEL_ID = "Systran/faster-whisper-small"
+MS_FILES = ["config.json", "model.bin", "tokenizer.json", "vocabulary.txt"]
+MS_LOCAL_DIR = MODELS_DIR / "modelscope-small"
+
+
+def _ms_download_file(name: str, dest: Path) -> None:
+    """从 ModelScope 下载单个模型文件(带 .part 临时文件与断点续传)。"""
+    url = (
+        f"https://modelscope.cn/api/v1/models/{MS_MODEL_ID}/repo"
+        f"?Revision=master&FilePath={name}"
+    )
+    part = dest.with_suffix(dest.suffix + ".part")
+    downloaded = part.stat().st_size if part.exists() else 0
+    req = urllib.request.Request(url)
+    if downloaded:
+        req.add_header("Range", f"bytes={downloaded}-")
+    with urllib.request.urlopen(req, timeout=60) as resp, open(part, "ab") as fh:
+        while True:
+            chunk = resp.read(1 << 20)
+            if not chunk:
+                break
+            fh.write(chunk)
+    part.replace(dest)
+
+
+def ensure_modelscope_model() -> Path:
+    """确保 ModelScope 版模型在本地,返回模型目录。"""
+    MS_LOCAL_DIR.mkdir(parents=True, exist_ok=True)
+    for name in MS_FILES:
+        dest = MS_LOCAL_DIR / name
+        if dest.exists():
+            continue
+        print(f"ASR: 从 ModelScope 下载 {name} ...", flush=True)
+        _ms_download_file(name, dest)
+    return MS_LOCAL_DIR
+
+
+def load_whisper_model():
+    """加载 whisper 模型。优先本地缓存;没有则走 ModelScope(国内稳定),再退回 HF 镜像。"""
+    kwargs = dict(device="cpu", compute_type="int8")
+    # 1) ModelScope 本地目录已下载完整
+    if all((MS_LOCAL_DIR / f).exists() for f in MS_FILES):
+        return WhisperModel(str(MS_LOCAL_DIR), **kwargs)
+    # 2) HF 缓存已存在(便携全量包/旧安装),离线可加载
+    hf_cache = MODELS_DIR / f"models--Systran--faster-whisper-{WHISPER_MODEL_NAME}"
+    if hf_cache.exists():
+        try:
+            return WhisperModel(
+                WHISPER_MODEL_NAME, download_root=str(MODELS_DIR), **kwargs
+            )
+        except Exception:
+            pass  # 缓存不完整则继续走下载
+    # 3) 下载:ModelScope 优先(国内稳定),失败退回 HF 镜像
+    try:
+        return WhisperModel(str(ensure_modelscope_model()), **kwargs)
+    except Exception as exc:
+        print(f"ASR: ModelScope 下载失败({exc}),尝试 HF 镜像 ...", flush=True)
+        return WhisperModel(
+            WHISPER_MODEL_NAME, download_root=str(MODELS_DIR), **kwargs
+        )
 
 
 CONTENT_TYPES = {
@@ -750,6 +808,18 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    # CLI:`python server/app.py --prefetch-model` 只下载语音模型后退出(安装脚本用)
+    if "--prefetch-model" in sys.argv:
+        if asr_status != "loading":
+            print(f"ASR 不可用: {whisper_error}", flush=True)
+            sys.exit(1)
+        preload_whisper()
+        if asr_status == "ready":
+            print("语音模型就绪", flush=True)
+            sys.exit(0)
+        print(f"模型下载失败: {whisper_error}", flush=True)
+        sys.exit(1)
+
     if llm_provider == "openai-compatible":
         mode = f"LLM: OpenAI 兼容接口({openai_cfg['base_url']}, 模型 {openai_cfg['model']})"
     elif llm_provider == "kimi-agent-gw":
