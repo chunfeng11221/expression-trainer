@@ -11,6 +11,7 @@ const VIEWPOINT_HINTS: Record<Category, string> = {
   工作: '结论是否先行',
   日常: '答案是否明确',
   申论: '主张是否明确',
+  随心记: '中心是否讲清楚',
 }
 
 interface ResultSectionsProps {
@@ -49,7 +50,11 @@ export default function ResultSections({ analysis, limitSeconds, audioUrl, categ
         <h2>四项评分</h2>
         <ScoreCard scores={analysis.scores} overallScore={analysis.overallScore} />
         {category && (
-          <p className="score-hint">本题是{category}类,"观点"维度看:{VIEWPOINT_HINTS[category]}</p>
+          <p className="score-hint">
+            {category === '随心记'
+              ? `没有题目,"观点"维度看:${VIEWPOINT_HINTS[category]}`
+              : `本题是${category}类,"观点"维度看:${VIEWPOINT_HINTS[category]}`}
+          </p>
         )}
       </section>
 

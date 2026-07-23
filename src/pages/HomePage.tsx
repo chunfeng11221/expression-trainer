@@ -1,8 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { LayoutList, Shuffle } from 'lucide-react'
+import { Feather, LayoutList, Shuffle } from 'lucide-react'
 import AiSetupCard from '../components/AiSetupCard'
-import { getRandomTopic } from '../data/topics'
+import { FREE_TOPIC, getRandomTopic } from '../data/topics'
 import { fetchHealth } from '../services/aiAnalysisService'
 import { loadAttempts, loadSession, loadSettings, saveSession } from '../utils/storage'
 
@@ -32,6 +32,17 @@ export default function HomePage() {
     navigate('/train')
   }
 
+  const startFree = () => {
+    saveSession({
+      topic: FREE_TOPIC,
+      phase: 'recording',
+      attemptNumber: 1,
+      startedAt: Date.now(),
+      sessionId: crypto.randomUUID(),
+    })
+    navigate('/train')
+  }
+
   return (
     <div className="page page-center home">
       <p className="home-brand">表达力训练器</p>
@@ -45,6 +56,13 @@ export default function HomePage() {
         <Link to="/topics" className="btn btn-ghost btn-lg">
           <LayoutList size={18} /> 选择题目
         </Link>
+      </div>
+
+      <div className="home-free">
+        <button type="button" className="btn btn-ghost home-free-btn" onClick={startFree}>
+          <Feather size={15} /> 随心记
+        </button>
+        <p className="home-free-note">想说什么都行,没有题目,不限时间</p>
       </div>
 
       {session && (

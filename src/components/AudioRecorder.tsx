@@ -11,6 +11,8 @@ interface AudioRecorderProps {
   liveText: string
   /** 实时口癖统计,页面角落轻量展示 */
   fillerCounts: Array<{ word: string; count: number }>
+  /** 随心记模式:正计时、无倒计时、无自动停止 */
+  freeMode?: boolean
   onFinish: (blob: Blob | null, durationSeconds: number) => void
   /** 点击「重新开始」:父组件负责重置转写并以 key 重挂载本组件 */
   onRestart: () => void
@@ -22,6 +24,7 @@ export default function AudioRecorder({
   limitSeconds,
   liveText,
   fillerCounts,
+  freeMode = false,
   onFinish,
   onRestart,
 }: AudioRecorderProps) {
@@ -60,7 +63,7 @@ export default function AudioRecorder({
     if (finishingRef.current) return
     finishingRef.current = true
     const service = serviceRef.current
-    const duration = Math.min(elapsed, limitSeconds)
+    const duration = freeMode ? elapsed : Math.min(elapsed, limitSeconds)
     if (!service) {
       onFinishRef.current(null, duration)
       return
@@ -70,9 +73,9 @@ export default function AudioRecorder({
   }
 
   useEffect(() => {
-    if (elapsed >= limitSeconds) void finish()
+    if (!freeMode && elapsed >= limitSeconds) void finish()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [elapsed, limitSeconds])
+  }, [elapsed, limitSeconds, freeMode])
 
   const retry = () => {
     setError(null)
@@ -101,7 +104,8 @@ export default function AudioRecorder({
 
       <div className="recorder-time">
         <span className="recorder-elapsed">{formatTime(elapsed)}</span>
-        <span className="recorder-remaining">剩余 {formatTime(remaining)}</span>
+        {!freeMode && <span className="recorder-remaining">剩余 {formatTime(remaining)}</span>}
+        {freeMode && <span className="recorder-remaining">不限时,说完点结束</span>}
       </div>
 
       <div className="volume-track" aria-label="音量">

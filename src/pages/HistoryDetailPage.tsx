@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, Copy, Download, Trash2 } from 'lucide-react'
 import ResultSections from '../components/ResultSections'
+import { isFreeTopic } from '../data/topics'
 import { deleteAudio, getAudio } from '../utils/audioStore'
+import { copyText, downloadTranscriptTxt, plainTranscript } from '../utils/transcriptText'
 import type { HistoryEntry } from '../types/training'
 import { deleteHistoryEntry, formatDateTime, getHistoryEntry } from '../utils/storage'
 
@@ -13,6 +15,7 @@ export default function HistoryDetailPage() {
     attemptId ? getHistoryEntry(attemptId) : null,
   )
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   // 录音从 IndexedDB 取;没有(旧数据/隐私模式)就不显示播放器
   useEffect(() => {
@@ -49,6 +52,14 @@ export default function HistoryDetailPage() {
     setEntry(null)
   }
 
+  const isFree = isFreeTopic(entry.topic)
+  const copyTranscript = async () => {
+    if (await copyText(plainTranscript(entry.analysis))) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
   return (
     <div className="page">
       <header className="page-header history-detail-header">
@@ -57,10 +68,32 @@ export default function HistoryDetailPage() {
             <ArrowLeft size={16} /> 训练历史
           </Link>
           <span className="result-attempt-label">
-            {formatDateTime(entry.savedAt)} · 第 {entry.attemptNumber} 次回答 · {entry.topic.title}
+            {formatDateTime(entry.savedAt)} · {isFree ? '随心记' : `第 ${entry.attemptNumber} 次回答`} · {entry.topic.title}
           </span>
         </div>
         <span className="history-detail-actions">
+          {isFree && (
+            <>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => void copyTranscript()}>
+                {copied ? (
+                  <>
+                    <Check size={14} /> 已复制
+                  </>
+                ) : (
+                  <>
+                    <Copy size={14} /> 复制文字稿
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => downloadTranscriptTxt(entry.analysis, entry.savedAt)}
+              >
+                <Download size={14} /> 下载文字稿
+              </button>
+            </>
+          )}
           <span className="analysis-source">
             {entry.analysis.source === 'ai' ? 'AI 分析' : '本地分析'}
           </span>

@@ -69,7 +69,12 @@ export default function HistoryPage() {
                   <span className="history-attempts">
                     {group.map((entry, i) => (
                       <Link key={entry.id} to={`/history/${entry.id}`} className="history-attempt-chip">
-                        第{entry.attemptNumber}次 <strong>{entry.analysis.overallScore}</strong>
+                        {entry.topic.category === '随心记' ? (
+                          <span className="free-chip">随心记</span>
+                        ) : (
+                          <>第{entry.attemptNumber}次</>
+                        )}{' '}
+                        <strong>{entry.analysis.overallScore}</strong>
                         {i > 0 && (
                           <ScoreDelta
                             before={group[i - 1].analysis.overallScore}

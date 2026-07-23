@@ -74,6 +74,18 @@ export const TOPICS: Topic[] = [
 
 export const CATEGORIES = ['日常', '观点', '工作', '解释', '申论'] as const
 
+/** 「随心记」模式的伪题目:不出题、不准备、不限时 */
+export const FREE_TOPIC: Topic = {
+  id: 'free',
+  title: '随心记',
+  category: '随心记',
+  difficulty: '简单',
+}
+
+export function isFreeTopic(topic: Pick<Topic, 'id' | 'category'>): boolean {
+  return topic.id === 'free' || topic.category === '随心记'
+}
+
 export function getTopicById(id: string): Topic | undefined {
   return TOPICS.find((t) => t.id === id)
 }

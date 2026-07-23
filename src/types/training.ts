@@ -1,6 +1,6 @@
 import type { AnalysisResult } from './analysis'
 
-export type Category = '日常' | '观点' | '工作' | '解释' | '申论'
+export type Category = '日常' | '观点' | '工作' | '解释' | '申论' | '随心记'
 export type Difficulty = '简单' | '普通' | '困难'
 
 export interface Topic {

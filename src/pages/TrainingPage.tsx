@@ -4,6 +4,7 @@ import { Play } from 'lucide-react'
 import AudioRecorder from '../components/AudioRecorder'
 import Countdown from '../components/Countdown'
 import { mockTranscript, mockTranscriptImproved } from '../data/mockAnalysis'
+import { isFreeTopic } from '../data/topics'
 import { analyzeWithAI, fetchPrepHints } from '../services/aiAnalysisService'
 import type { AsrSegment, WordTimestamp } from '../services/analysisService'
 import {
@@ -55,6 +56,13 @@ export default function TrainingPage() {
     if (session?.attemptNumber !== 2) return []
     return loadAttempts().first?.analysis.improvements.map((i) => i.title) ?? []
   }, [session?.attemptNumber])
+
+  const isFree = session ? isFreeTopic(session.topic) : false
+
+  // 随心记:不出题不准备,直接进录音
+  useEffect(() => {
+    if (isFree && phase === 'preparing') setPhase('recording')
+  }, [isFree, phase])
 
   // 准备阶段:先显示默认四条提示,后台请求 AI 的针对性提示,返回后静默替换。
   // 准备时间为 0 时直接进录音,不发请求。
@@ -160,10 +168,15 @@ export default function TrainingPage() {
 
       // 3. 等 AI 分析返回再进结果页;AI 失败/超时自动回退本地启发式
       setAnalyzingHint('AI 正在分析你的表达,可能需要几十秒……')
+      // 随心记:题目快照用文字稿第一句话截取约 20 字
+      const topicTitle = isFree
+        ? transcriptText.replace(/[\s，。!！？?、…,.!?]+/g, ' ').trim().slice(0, 20) || '随心记'
+        : session.topic.title
+      const topicForAnalysis = isFree ? { ...session.topic, title: topicTitle } : session.topic
       const analysis = await analyzeWithAI({
         transcriptText,
         durationSeconds: Math.max(durationSeconds, 1),
-        topic: session.topic,
+        topic: topicForAnalysis,
         limitSeconds: settings.answerSeconds,
         liveSegments: liveForAnalysis,
         words,
@@ -175,7 +188,7 @@ export default function TrainingPage() {
       saveAttempt({
         attemptNumber: session.attemptNumber,
         topicId: session.topic.id,
-        topicTitle: session.topic.title,
+        topicTitle,
         topicCategory: session.topic.category,
         transcriptText,
         usedMockTranscript: useMock,
@@ -191,7 +204,7 @@ export default function TrainingPage() {
         savedAt: Date.now(),
         sessionId,
         attemptNumber: session.attemptNumber,
-        topic: session.topic,
+        topic: { ...session.topic, title: topicTitle },
         settings,
         analysis,
         transcriptText,
@@ -222,8 +235,9 @@ export default function TrainingPage() {
       <div className="page page-center">
         <AudioRecorder
           key={resetKey}
-          topicTitle={session.topic.title}
+          topicTitle={isFree ? '随心记' : session.topic.title}
           limitSeconds={settings.answerSeconds}
+          freeMode={isFree}
           liveText={liveText}
           fillerCounts={fillerCounts}
           onFinish={handleFinish}

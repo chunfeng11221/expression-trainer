@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { GitCompareArrows, Home, LayoutList, Mic, RotateCcw } from 'lucide-react'
+import { Check, Copy, Download, GitCompareArrows, Home, LayoutList, Mic, RotateCcw } from 'lucide-react'
 import ResultSections from '../components/ResultSections'
-import { getTopicById } from '../data/topics'
+import { getTopicById, isFreeTopic } from '../data/topics'
+import { copyText, downloadTranscriptTxt, plainTranscript } from '../utils/transcriptText'
 import { loadAttempts, loadAudioBlob, loadSettings, saveSession } from '../utils/storage'
 
 export default function ResultPage() {
@@ -10,6 +11,7 @@ export default function ResultPage() {
   const stored = loadAttempts()
   const attempt = stored.second ?? stored.first ?? null
   const settings = useMemo(() => loadSettings(), [])
+  const [copied, setCopied] = useState(false)
 
   const blob = attempt ? loadAudioBlob(attempt.attemptNumber) : null
   const audioUrl = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob])
@@ -31,7 +33,8 @@ export default function ResultPage() {
   }
 
   const { analysis } = attempt
-  const canRetry = attempt.attemptNumber === 1
+  const isFree = attempt.topicCategory === '随心记' || isFreeTopic({ id: attempt.topicId, category: attempt.topicCategory ?? '日常' })
+  const canRetry = attempt.attemptNumber === 1 && !isFree
 
   const startSecondAttempt = () => {
     const first = loadAttempts().first
@@ -53,11 +56,18 @@ export default function ResultPage() {
     navigate('/train')
   }
 
+  const copyTranscript = async () => {
+    if (await copyText(plainTranscript(analysis))) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
   return (
     <div className="page result">
       <header className="page-header">
         <span className="result-attempt-label">
-          第 {attempt.attemptNumber} 次回答 · {attempt.topicTitle}
+          {isFree ? '随心记' : `第 ${attempt.attemptNumber} 次回答`} · {attempt.topicTitle}
         </span>
         <span className="analysis-source">
           {analysis.source === 'ai' ? 'AI 分析' : '本地分析'}
@@ -72,26 +82,54 @@ export default function ResultPage() {
       />
 
       <footer className="result-actions">
-        {canRetry ? (
-          <button type="button" className="btn btn-primary btn-xl" onClick={startSecondAttempt}>
-            <Mic size={20} /> 根据建议再说一次
-          </button>
+        {isFree ? (
+          <div className="result-actions-secondary">
+            <button type="button" className="btn btn-primary btn-lg" onClick={() => void copyTranscript()}>
+              {copied ? (
+                <>
+                  <Check size={18} /> 已复制
+                </>
+              ) : (
+                <>
+                  <Copy size={18} /> 复制文字稿
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-lg"
+              onClick={() => downloadTranscriptTxt(analysis, attempt.createdAt)}
+            >
+              <Download size={18} /> 下载文字稿
+            </button>
+            <Link to="/" className="btn btn-ghost btn-lg">
+              <Home size={16} /> 回到首页
+            </Link>
+          </div>
         ) : (
-          <Link to="/compare" className="btn btn-primary btn-xl">
-            <GitCompareArrows size={20} /> 查看前后对比
-          </Link>
+          <>
+            {canRetry ? (
+              <button type="button" className="btn btn-primary btn-xl" onClick={startSecondAttempt}>
+                <Mic size={20} /> 根据建议再说一次
+              </button>
+            ) : (
+              <Link to="/compare" className="btn btn-primary btn-xl">
+                <GitCompareArrows size={20} /> 查看前后对比
+              </Link>
+            )}
+            <div className="result-actions-secondary">
+              <button type="button" className="btn btn-ghost" onClick={startSecondAttempt}>
+                <RotateCcw size={16} /> 同题再练一次
+              </button>
+              <Link to="/topics" className="btn btn-ghost">
+                <LayoutList size={16} /> 换个题目
+              </Link>
+              <Link to="/" className="btn btn-ghost">
+                <Home size={16} /> 回到首页
+              </Link>
+            </div>
+          </>
         )}
-        <div className="result-actions-secondary">
-          <button type="button" className="btn btn-ghost" onClick={startSecondAttempt}>
-            <RotateCcw size={16} /> 同题再练一次
-          </button>
-          <Link to="/topics" className="btn btn-ghost">
-            <LayoutList size={16} /> 换个题目
-          </Link>
-          <Link to="/" className="btn btn-ghost">
-            <Home size={16} /> 回到首页
-          </Link>
-        </div>
       </footer>
     </div>
   )
