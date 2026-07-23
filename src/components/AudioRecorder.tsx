@@ -15,6 +15,8 @@ interface AudioRecorderProps {
   freeMode?: boolean
   /** 倒计时区域的时间含义标注,如面试模式的「作答时间」 */
   timeLabel?: string
+  /** 重练时的改进目标(第二次回答),录音页顶部克制的位置小字提示;第一次传空 */
+  goals?: string[]
   onFinish: (blob: Blob | null, durationSeconds: number) => void
   /** 点击「重新开始」:父组件负责重置转写并以 key 重挂载本组件 */
   onRestart: () => void
@@ -28,6 +30,7 @@ export default function AudioRecorder({
   fillerCounts,
   freeMode = false,
   timeLabel,
+  goals = [],
   onFinish,
   onRestart,
 }: AudioRecorderProps) {
@@ -103,6 +106,11 @@ export default function AudioRecorder({
 
   return (
     <div className="recorder">
+      {goals.length > 0 && (
+        <p className="recorder-goals">
+          本次目标:{goals.map((goal, i) => `${'①②③④'[i] ?? ''}${goal}`).join('  ')}
+        </p>
+      )}
       <p className="recorder-topic">{topicTitle}</p>
 
       <div className="recorder-time">

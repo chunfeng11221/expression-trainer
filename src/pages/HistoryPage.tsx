@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, GitCompareArrows, Home } from 'lucide-react'
-import type { HistoryEntry } from '../types/training'
+import type { Category, HistoryEntry } from '../types/training'
+import { normalizeCategory } from '../types/training'
 import { formatDateTime, loadHistory } from '../utils/storage'
 
 function truncate(text: string, max = 16): string {
@@ -37,7 +38,24 @@ function ScoreDelta({ before, after }: { before: number; after: number }) {
 
 export default function HistoryPage() {
   const history = useMemo(() => loadHistory(), [])
-  const groups = useMemo(() => groupBySession(history), [history])
+  const [filter, setFilter] = useState<Category | '全部'>('全部')
+
+  // 只展示历史里真实出现过的分类;旧数据「申论」按「公考面试」归并
+  const presentCategories = useMemo(() => {
+    const ORDER: Category[] = ['公考面试', '日常', '观点', '工作', '解释', '随心记']
+    const seen = new Set<Category>()
+    for (const e of history) {
+      const c = normalizeCategory(e.topic?.category)
+      if (c) seen.add(c)
+    }
+    return ORDER.filter((c) => seen.has(c))
+  }, [history])
+
+  const filtered =
+    filter === '全部'
+      ? history
+      : history.filter((e) => normalizeCategory(e.topic?.category) === filter)
+  const groups = useMemo(() => groupBySession(filtered), [filtered])
 
   return (
     <div className="page">
@@ -56,7 +74,22 @@ export default function HistoryPage() {
           </Link>
         </div>
       ) : (
-        <div className="history-list">
+        <>
+          {presentCategories.length > 1 && (
+            <div className="tabs history-filter">
+              {(['全部', ...presentCategories] as const).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className={`tab ${filter === c ? 'tab-active' : ''}`}
+                  onClick={() => setFilter(c)}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="history-list">
           {groups.map((group) => {
             const latest = group[group.length - 1]
             return (
@@ -99,7 +132,8 @@ export default function HistoryPage() {
               </div>
             )
           })}
-        </div>
+          </div>
+        </>
       )}
     </div>
   )

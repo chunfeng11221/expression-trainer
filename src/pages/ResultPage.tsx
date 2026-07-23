@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Check, Copy, Download, GitCompareArrows, Home, LayoutList, Mic, RotateCcw } from 'lucide-react'
+import { Check, Copy, Download, Feather, GitCompareArrows, Home, LayoutList, Mic, RotateCcw } from 'lucide-react'
 import ResultSections from '../components/ResultSections'
-import { getTopicById, isFreeTopic, isInterviewTopic } from '../data/topics'
+import { FREE_TOPIC, getTopicById, isFreeTopic, isInterviewTopic } from '../data/topics'
 import { copyText, downloadTranscriptTxt, plainTranscript } from '../utils/transcriptText'
 import { loadAttempts, loadAudioBlob, loadSettings, resolveTrainingSettings, saveSession } from '../utils/storage'
 
@@ -68,6 +68,39 @@ export default function ResultPage() {
     }
   }
 
+  /** 随心记:再录一段(直接进录音,无准备) */
+  const startFreeAgain = () => {
+    saveSession({
+      topic: FREE_TOPIC,
+      phase: 'recording',
+      attemptNumber: 1,
+      startedAt: Date.now(),
+      sessionId: crypto.randomUUID(),
+    })
+    navigate('/train')
+  }
+
+  // 页面长,主按钮在「最需要修改的两点」后面也放一份,不用滚到底才看到
+  const midCta = isFree ? (
+    <div className="result-mid-cta">
+      <button type="button" className="btn btn-primary btn-lg" onClick={startFreeAgain}>
+        <Feather size={18} /> 再记一段
+      </button>
+    </div>
+  ) : canRetry ? (
+    <div className="result-mid-cta">
+      <button type="button" className="btn btn-primary btn-lg" onClick={startSecondAttempt}>
+        <Mic size={18} /> 根据建议再说一次
+      </button>
+    </div>
+  ) : (
+    <div className="result-mid-cta">
+      <Link to="/compare" className="btn btn-primary btn-lg">
+        <GitCompareArrows size={18} /> 查看前后对比
+      </Link>
+    </div>
+  )
+
   return (
     <div className="page result">
       <header className="page-header">
@@ -84,6 +117,7 @@ export default function ResultPage() {
         limitSeconds={limitSeconds}
         audioUrl={audioUrl}
         category={attempt.topicCategory ?? getTopicById(attempt.topicId)?.category}
+        afterImprovements={midCta}
       />
 
       <footer className="result-actions">

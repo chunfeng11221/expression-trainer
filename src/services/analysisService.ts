@@ -11,7 +11,7 @@ import type {
   TranscriptSegment,
 } from '../types/analysis'
 import type { Topic } from '../types/training'
-import { countFillers, detectFillerWords, detectFillerWordsTimed, FILLER_WORDS } from '../utils/fillerWords'
+import { countFillers, detectFillerWords, detectFillerWordsTimed, FILLER_ALTERNATIVES, FILLER_WORDS } from '../utils/fillerWords'
 import {
   overallScore,
   scoreContent,
@@ -515,8 +515,7 @@ function buildImprovements(
         return {
           title: `口癖"${topFiller.word}"出现了 ${topFiller.count} 次`,
           description: `比如你说"${fillerSentence ? shorten(fillerSentence) : topFiller.word}"。高频口癖会不断打断听众的注意力。`,
-          suggestion:
-            '想不起下一句时,允许自己安静停顿一两秒——停顿不是错误,比用口头词填满更专业。',
+          suggestion: `下次把"${topFiller.word}"换成${FILLER_ALTERNATIVES[topFiller.word] ?? '一个有信息量的连接词'};想不起下一句时,允许自己安静停顿一两秒——停顿不是错误,比用口头词填满更专业。`,
           transcriptQuote: fillerSentence ?? undefined,
         }
       }

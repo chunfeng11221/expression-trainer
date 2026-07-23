@@ -15,9 +15,11 @@ const PRESETS: Array<{
   tag?: string
   baseUrl: string
   model: string
+  /** 去哪里拿 key(新用户最常卡的一步) */
+  keySite?: string
 }> = [
-  { key: 'deepseek', label: 'DeepSeek', tag: '推荐', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
-  { key: 'moonshot', label: 'Moonshot', baseUrl: 'https://api.moonshot.cn', model: 'moonshot-v1-8k' },
+  { key: 'deepseek', label: 'DeepSeek', tag: '推荐', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat', keySite: 'platform.deepseek.com' },
+  { key: 'moonshot', label: 'Moonshot', baseUrl: 'https://api.moonshot.cn', model: 'moonshot-v1-8k', keySite: 'platform.moonshot.cn' },
   { key: 'kimi', label: 'Kimi(agent-gw)', baseUrl: '', model: '' },
   { key: 'custom', label: '自定义', baseUrl: '', model: '' },
 ]
@@ -198,7 +200,11 @@ export default function AiSetupCard({ onSaved, showStatus = false }: AiSetupCard
         <label className="ai-field ai-setup-key">
           <span>
             API Key
-            {configInfo?.key_tail ? `(已保存 ${configInfo.key_tail},换个 key 直接粘贴覆盖)` : '(去服务商平台复制,以 sk- 开头)'}
+            {configInfo?.key_tail
+              ? `(已保存 ${configInfo.key_tail},换个 key 直接粘贴覆盖)`
+              : current.keySite
+                ? `(去 ${current.keySite} 注册并创建 key,以 sk- 开头)`
+                : '(去服务商平台复制,以 sk- 开头)'}
           </span>
           <input
             type="password"

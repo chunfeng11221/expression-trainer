@@ -1,7 +1,9 @@
+import { useRef, type ReactNode } from 'react'
 import type { AnalysisResult } from '../types/analysis'
 import type { Category } from '../types/training'
 import { normalizeCategory } from '../types/training'
 import { formatTime } from '../services/transcriptionService'
+import { seekAudio } from '../utils/audioSeek'
 import ScoreCard from './ScoreCard'
 import Transcript from './Transcript'
 
@@ -26,17 +28,20 @@ const CONTENT_HINTS: Partial<Record<Category, string>> = {
 interface ResultSectionsProps {
   analysis: AnalysisResult
   limitSeconds: number
-  /** 有录音可回放时传入 objectURL */
+  /** 有录音可回放时传入 objectURL;文字稿段落同时变得可点击跳播 */
   audioUrl?: string | null
   /** 题型;有则在评分下显示"观点"维度的题型化含义 */
   category?: Category
+  /** 插在「最需要修改的两点」区块后的内容(结果页用来放主按钮,避免长页面底部才看到) */
+  afterImprovements?: ReactNode
 }
 
 /**
  * 分析结果的全部内容区块(诊断/评分/数据/反馈/文字稿/提纲),
  * 结果页与历史详情页共用。
  */
-export default function ResultSections({ analysis, limitSeconds, audioUrl, category }: ResultSectionsProps) {
+export default function ResultSections({ analysis, limitSeconds, audioUrl, category, afterImprovements }: ResultSectionsProps) {
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const { metrics } = analysis
   const overtimeSeconds = metrics.durationSeconds - limitSeconds
   const isOvertime = overtimeSeconds > limitSeconds * 0.05
@@ -49,7 +54,7 @@ export default function ResultSections({ analysis, limitSeconds, audioUrl, categ
     <>
       {audioUrl && (
         <section className="result-section">
-          <audio controls src={audioUrl} className="audio-player" />
+          <audio ref={audioRef} controls src={audioUrl} className="audio-player" />
         </section>
       )}
 
@@ -153,9 +158,14 @@ export default function ResultSections({ analysis, limitSeconds, audioUrl, categ
         </div>
       </section>
 
+      {afterImprovements}
+
       <section className="result-section">
         <h2>完整文字稿</h2>
-        <Transcript segments={analysis.transcript} />
+        <Transcript
+          segments={analysis.transcript}
+          onSeek={audioUrl ? (seconds) => seekAudio(audioRef.current, seconds) : undefined}
+        />
       </section>
 
       <section className="result-section">

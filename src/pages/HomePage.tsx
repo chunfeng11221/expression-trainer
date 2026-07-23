@@ -4,7 +4,8 @@ import { Feather, LayoutList, Shuffle } from 'lucide-react'
 import AiSetupCard from '../components/AiSetupCard'
 import { FREE_TOPIC, getRandomTopic } from '../data/topics'
 import { fetchHealth } from '../services/aiAnalysisService'
-import { loadAttempts, loadSession, loadSettings, saveSession, INTERVIEW_ANSWER_SECONDS, INTERVIEW_PREPARE_SECONDS } from '../utils/storage'
+import { loadAttempts, loadHistory, loadSession, loadSettings, saveSession, INTERVIEW_ANSWER_SECONDS, INTERVIEW_PREPARE_SECONDS } from '../utils/storage'
+import { computePracticeStats, practiceStatsText } from '../utils/practiceStats'
 
 function formatSeconds(seconds: number): string {
   return seconds >= 60 ? `${seconds / 60}分钟` : `${seconds}秒`
@@ -48,6 +49,7 @@ export default function HomePage() {
       <p className="home-brand">表达力训练器</p>
       <h1 className="home-title">先说出来,再说清楚。</h1>
       <p className="home-sub">一分钟口头表达训练:拿到题目,准备 15 秒,说 1 分钟,拿到具体反馈,再说一次。</p>
+      <p className="home-today">{practiceStatsText(computePracticeStats(loadHistory().map((e) => e.savedAt)))}</p>
 
       <div className="home-actions">
         <button type="button" className="btn btn-primary btn-lg" onClick={startRandom}>

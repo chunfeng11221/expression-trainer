@@ -159,6 +159,14 @@ p {
   max-width: 460px;
 }
 
+/* 今日练习牵引:副标题下一行极轻小字 */
+.home-today {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
+  opacity: 0.75;
+}
+
 .home-actions {
   display: flex;
   gap: 16px;
@@ -303,6 +311,12 @@ p {
   line-height: 1;
 }
 
+/* 准备页:说明到点会自动开始,减少"我还没准备好怎么办"的焦虑 */
+.preparing-autostart {
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .tips-box,
 .goals-box {
   background: var(--surface);
@@ -353,6 +367,15 @@ p {
   font-size: 20px;
   font-weight: 600;
   margin-bottom: 28px;
+}
+
+/* 重练目标跟随:小号半透明,不抢录音注意力 */
+.recorder-goals {
+  font-size: 13px;
+  color: var(--muted);
+  opacity: 0.7;
+  margin-bottom: 12px;
+  max-width: 460px;
 }
 
 .recorder-time {
@@ -672,6 +695,25 @@ p {
   padding: 14px 18px;
 }
 
+/* 有录音可回放时:段落可点击,从该段时间继续听 */
+.transcript-segment-seekable {
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.transcript-segment-seekable:hover {
+  border-color: var(--primary);
+}
+
+.transcript-segment-seekable:hover .transcript-time {
+  color: var(--primary);
+}
+
+.transcript-segment-seekable:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .transcript-meta {
   display: flex;
   align-items: center;
@@ -756,6 +798,13 @@ p {
   align-items: center;
   gap: 18px;
   padding-top: 8px;
+}
+
+/* 「最需要修改的两点」后面的主按钮(结果页长,底部按钮很多人看不到) */
+.result-mid-cta {
+  display: flex;
+  justify-content: center;
+  margin: 20px 0 4px;
 }
 
 .result-actions-secondary {
@@ -905,6 +954,11 @@ p {
 }
 
 /* ---------- 训练历史 ---------- */
+
+.history-filter {
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
 
 .history-empty {
   display: flex;

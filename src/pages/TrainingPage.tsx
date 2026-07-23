@@ -142,7 +142,12 @@ export default function TrainingPage() {
   const handleFinish = (blob: Blob | null, durationSeconds: number) => {
     const liveSegs = transcriberRef.current?.stop() ?? liveSegments
     if (blob) saveAudioBlob(session.attemptNumber, blob)
-    setAnalyzingHint('正在转写录音……')
+    // 长录音(面试 3-5 分钟)CPU 转写要等一两分钟,文案提前打招呼,免得以为卡死
+    setAnalyzingHint(
+      durationSeconds >= 90
+        ? `正在转写这段约 ${Math.round(durationSeconds / 60)} 分钟的录音,可能要等 1–2 分钟……`
+        : '正在转写录音……',
+    )
     setPhase('analyzing')
 
     void (async () => {
@@ -225,14 +230,18 @@ export default function TrainingPage() {
     })()
   }
 
-  const handleRestart = () => setResetKey((k) => k + 1)
+  const handleRestart = () => {
+    // 防误触:按钮就在「结束录音」旁边,点错一次就毁掉一段可能很好的录音
+    if (!window.confirm('重新开始会丢弃当前这段录音,确定重录?')) return
+    setResetKey((k) => k + 1)
+  }
 
   if (phase === 'analyzing') {
     return (
       <div className="page page-center">
         <div className="spinner" />
         <p className="analyzing-text">{analyzingHint}</p>
-        <p className="analyzing-sub">AI 正在逐句点评,请稍等。停顿不是错误,这一次只要比上一次更具体。</p>
+        <p className="analyzing-sub">转写在你自己电脑上进行,完成后自动跳转,别刷新或关闭页面。停顿不是错误,这一次只要比上一次更具体。</p>
       </div>
     )
   }
@@ -248,6 +257,7 @@ export default function TrainingPage() {
           liveText={liveText}
           fillerCounts={fillerCounts}
           timeLabel={isInterview ? '作答时间' : undefined}
+          goals={improvementGoals}
           onFinish={handleFinish}
           onRestart={handleRestart}
         />
@@ -278,6 +288,9 @@ export default function TrainingPage() {
       </p>
 
       <Countdown seconds={settings.prepareSeconds} onComplete={startRecording} />
+      <p className="preparing-autostart">
+        到点自动开始{isInterview ? '作答' : '录音'},想好了就点下面按钮,不用等满
+      </p>
 
       <div className="tips-box">
         <h2>

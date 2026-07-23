@@ -15,6 +15,19 @@ export const FILLER_WORDS = [
   '怎么说呢',
 ] as const
 
+/** 高频口癖的替代表达:改进建议里直接告诉用户下次怎么说,而不只是"少说口癖" */
+export const FILLER_ALTERNATIVES: Record<string, string> = {
+  然后: '「接下来」「与此同时」',
+  就是: '「也就是说」「具体来说」',
+  那个: '「这一点」,或直接停顿一秒',
+  其实: '多数时候可以直接删掉,不影响意思',
+  所以说: '「因此」「这样看来」',
+  怎么说呢: '直接停顿,想好再开口',
+  嗯: '直接停顿一秒,不用声音填满',
+  啊: '直接停顿一秒,不用声音填满',
+  呃: '直接停顿一秒,不用声音填满',
+}
+
 /** 长词优先,避免 "所以说" 被拆成 "所以" + "说" 之类误匹配 */
 const fillerPattern = new RegExp(
   [...FILLER_WORDS].sort((a, b) => b.length - a.length).join('|'),
