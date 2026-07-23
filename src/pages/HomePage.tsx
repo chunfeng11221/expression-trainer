@@ -4,7 +4,7 @@ import { Feather, LayoutList, Shuffle } from 'lucide-react'
 import AiSetupCard from '../components/AiSetupCard'
 import { FREE_TOPIC, getRandomTopic } from '../data/topics'
 import { fetchHealth } from '../services/aiAnalysisService'
-import { loadAttempts, loadSession, loadSettings, saveSession } from '../utils/storage'
+import { loadAttempts, loadSession, loadSettings, saveSession, INTERVIEW_ANSWER_SECONDS, INTERVIEW_PREPARE_SECONDS } from '../utils/storage'
 
 function formatSeconds(seconds: number): string {
   return seconds >= 60 ? `${seconds / 60}分钟` : `${seconds}秒`
@@ -79,8 +79,19 @@ export default function HomePage() {
       {llmReady === false && <AiSetupCard onSaved={() => setLlmReady(true)} />}
 
       <p className="home-settings">
-        当前默认:{formatSeconds(settings.answerSeconds)}表达 · {formatSeconds(settings.prepareSeconds)}
-        准备 · {settings.scene} · {settings.audience} <Link to="/settings">修改</Link>
+        {settings.timeCustomized ? (
+          <>
+            当前默认:{formatSeconds(settings.answerSeconds)}表达 · {formatSeconds(settings.prepareSeconds)}
+            准备 · {settings.scene} · {settings.audience} <Link to="/settings">修改</Link>
+          </>
+        ) : (
+          <>
+            当前默认:公考面试题 {formatSeconds(INTERVIEW_ANSWER_SECONDS)}作答 ·{' '}
+            {formatSeconds(INTERVIEW_PREPARE_SECONDS)}思考 · 面试(自动);其他题{' '}
+            {formatSeconds(settings.answerSeconds)}表达 · {formatSeconds(settings.prepareSeconds)}准备 ·{' '}
+            {settings.scene} · {settings.audience} <Link to="/settings">修改</Link>
+          </>
+        )}
       </p>
 
       <p className="home-footer">

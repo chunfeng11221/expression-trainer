@@ -1,5 +1,6 @@
 import type { AnalysisResult } from '../types/analysis'
 import type { Category } from '../types/training'
+import { normalizeCategory } from '../types/training'
 import { formatTime } from '../services/transcriptionService'
 import ScoreCard from './ScoreCard'
 import Transcript from './Transcript'
@@ -10,8 +11,16 @@ const VIEWPOINT_HINTS: Record<Category, string> = {
   解释: '核心信息是否讲清',
   工作: '结论是否先行',
   日常: '答案是否明确',
-  申论: '主张是否明确',
+  公考面试: '审题与立场',
   随心记: '中心是否讲清楚',
+}
+
+/** 公考面试额外给出"结构/内容"维度的含义(对齐结构化面试评分口径) */
+const STRUCTURE_HINTS: Partial<Record<Category, string>> = {
+  公考面试: '逻辑条理',
+}
+const CONTENT_HINTS: Partial<Record<Category, string>> = {
+  公考面试: '分析与对策',
 }
 
 interface ResultSectionsProps {
@@ -32,6 +41,9 @@ export default function ResultSections({ analysis, limitSeconds, audioUrl, categ
   const overtimeSeconds = metrics.durationSeconds - limitSeconds
   const isOvertime = overtimeSeconds > limitSeconds * 0.05
   const topFillers = analysis.fillerWords.slice(0, 3)
+  // 历史数据里的旧分类「申论」按「公考面试」处理
+  const cat = normalizeCategory(category)
+  const viewpointHint = cat ? VIEWPOINT_HINTS[cat] : undefined
 
   return (
     <>
@@ -49,11 +61,13 @@ export default function ResultSections({ analysis, limitSeconds, audioUrl, categ
       <section className="result-section">
         <h2>四项评分</h2>
         <ScoreCard scores={analysis.scores} overallScore={analysis.overallScore} />
-        {category && (
+        {cat && viewpointHint && (
           <p className="score-hint">
-            {category === '随心记'
-              ? `没有题目,"观点"维度看:${VIEWPOINT_HINTS[category]}`
-              : `本题是${category}类,"观点"维度看:${VIEWPOINT_HINTS[category]}`}
+            {cat === '随心记'
+              ? `没有题目,"观点"维度看:${viewpointHint}`
+              : STRUCTURE_HINTS[cat]
+                ? `本题是${cat}类:"观点"看${viewpointHint},"结构"看${STRUCTURE_HINTS[cat]},"内容"看${CONTENT_HINTS[cat]}`
+                : `本题是${cat}类,"观点"维度看:${viewpointHint}`}
           </p>
         )}
       </section>

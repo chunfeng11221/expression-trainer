@@ -271,7 +271,7 @@ CONTENT_TYPES = {
     ".map": "application/json; charset=utf-8",
 }
 
-SYSTEM_PROMPT = """你是一位严格而友善的口头表达教练,正在点评一段一分钟口头表达的文字稿。全部使用中文。
+SYSTEM_PROMPT = """你是一位严格而友善的口头表达教练,正在点评一段口头表达的文字稿。全部使用中文。
 
 【输出格式】只输出一个 JSON 对象,不要输出 markdown 代码围栏以外的任何文字、解释或前后缀:
 {"scores":{"viewpoint":int,"structure":int,"content":int,"fluency":int},
@@ -310,14 +310,37 @@ CATEGORY_RUBRICS = {
     "解释": "本题是概念解释题。观点维度评判:核心定义/结论是否尽早给出(\"这是什么\"),不评判立场;内容维度看是否通俗、有无类比和例子、有无术语堆砌;结构维度看\"是什么→为什么/怎么用→总结\"。",
     "工作": "本题是工作汇报/介绍题(含产品介绍)。观点维度评判:结论/核心信息是否先行,不评判立场;内容维度看是否有具体事实、数据、措施;结构维度看\"背景→问题→措施→结果\"。",
     "日常": "本题是日常话题题。观点维度评判:是否有明确的个人答案,不评判立场;内容维度看是否有具体经历和细节。",
-    "申论": "本题是公共议题题。观点维度评判:是否有明确主张;内容维度看是否有现象分析+可行建议。",
+    "公考面试": (
+        "本题是公务员结构化面试题(公考面试),按真实面试评分口径评判,四个维度含义:\n"
+        "- 观点=审题与立场:是否切题、有没有跑题偏题;首段是否亮明态度/观点(\"怎么看\"类题先表态,如支持/反对/辩证看待;\"怎么办\"类题先亮明处理原则)。\n"
+        "- 结构=逻辑条理:框架完整(如 表态→分析→对策→收尾 / 是什么—为什么—怎么办);分点清晰(第一/第二/第三);每段末尾扣题。\n"
+        "- 内容=分析与对策:分析有层次(主体分析/层面分析);有事例或热点积累;对策具体可行、有主体有抓手,不空喊口号;辩证克制,不极端、不以偏概全。\n"
+        "- 流畅度=言语表达:口癖、停顿、语速;像当面说话,不像背稿。\n"
+        "面试硬性扣分(与全局硬约束叠加):\"怎么看\"类题首段不表态 → viewpoint 不高于 65;全程不分点(无第一/第二/第三或首先/其次)→ structure 不高于 65;"
+        "对策只有口号没有具体做法 → content 不高于 65;极端化表述(一竿子打翻一船人、以偏概全)→ content 不高于 70。\n"
+        "summary 和 improvements 的措辞必须用面试语境(表态/审题/分析/对策/扣题/分点),禁止说\"汇报\"\"立场题\"\"产品介绍\"这类错位说法。"
+    ),
     "随心记": "这是自由表达(随心记),没有题目。观点维度评判:有没有讲清楚一件事的中心(注意:不是评判立场,而是中心是否明确);结构维度看叙述是否有条理(时间线/层次是否清楚);内容维度看是否具体(有无细节、数字、场景);流畅度照常。summary 和 improvements 的措辞不要出现\"题目\"\"是否回答了题目\"\"立场\"这类词,改谈\"中心是否清楚、叙述是否有条理\"。",
 }
+
+# 公考面试子题型的参考框架(蒸馏自老夏面试体系;评判看核心要素,不要求面面俱到、不苛求顺序)
+INTERVIEW_SUBTYPE_FRAMEWORKS = {
+    "社会现象": "九宫格:态度评价/背景影响/原因/问题对策(宽备窄用,挑 3-5 个角度组装成答案)",
+    "态度观点": "三板斧:先分析 a,再分析 b,最后把 a 和 b 辩证统一(结合/转化/把握度/具体情况具体分析)",
+    "计划组织": "明确目的—筹备(人财物地时)—开展(分点推进)—总结(复盘与长效机制)",
+    "应急应变": "稳定局面—分清轻重缓急—逐一解决—复盘预防",
+    "人际关系": "理解尊重—沟通换位—解决问题—自省提升",
+    "情景模拟": "现场感:开场白—动之以情晓之以理—给出办法—自然收尾",
+}
+
+# 历史数据兼容:旧分类名「申论」一律按「公考面试」处理
+CATEGORY_ALIASES = {"申论": "公考面试"}
 
 
 def build_user_prompt(payload: dict) -> str:
     metrics = payload.get("metrics") or {}
     category = str(payload.get("category") or "通用")
+    category = CATEGORY_ALIASES.get(category, category)
     rubric = CATEGORY_RUBRICS.get(
         category,
         "按通用口头表达标准评判:核心信息明确、结构清晰、内容具体、表达流畅。",
@@ -329,7 +352,18 @@ def build_user_prompt(payload: dict) -> str:
         "",
         f"评判标准:{rubric}",
         "四个维度名称不变(观点/结构/内容/流畅度),但\"观点\"的含义必须按上述题型标准解释。",
-        "summary 和 improvements 的措辞要贴题型:介绍/工作类谈\"核心信息是否讲清、信息是否具体\",不要谈\"立场是否明确\"。",
+    ]
+    if category == "公考面试":
+        framework = INTERVIEW_SUBTYPE_FRAMEWORKS.get(str(payload.get("subtype") or ""))
+        if framework:
+            lines.append(
+                f"子题型参考框架:{framework}。看答案是否体现该框架的核心要素,不要求面面俱到、不苛求顺序。"
+            )
+    else:
+        lines.append(
+            "summary 和 improvements 的措辞要贴题型:介绍/工作类谈\"核心信息是否讲清、信息是否具体\",不要谈\"立场是否明确\"。"
+        )
+    lines += [
         "",
         "本地统计指标(已由程序准确计算,请采信):",
         f"- 总字数:{metrics.get('totalCharacters')}",
@@ -541,7 +575,7 @@ def transcribe_audio(raw: bytes, content_type: str) -> dict:
                     pass
 
 
-PREP_HINTS_PROMPT = """你是一位口头表达教练。用户即将就一道题目做一分钟口头表达,请给出 3-4 条思考提示,帮助他在 15 秒内组织思路。
+PREP_HINTS_PROMPT = """你是一位口头表达教练。用户即将就一道题目做口头表达,请给出 3-4 条思考提示,帮助他在准备时间内组织思路。
 严格要求:
 1. 只输出一个 JSON 数组,例如 ["提示一","提示二","提示三"],不要输出任何其他文字。
 2. 每条提示不超过 30 字。
@@ -560,18 +594,31 @@ def call_prep_hints(payload: dict) -> dict:
     topic = str(payload.get("topic") or "").strip()
     if not topic:
         return {"ok": False, "reason": "topic 为空"}
+    category = str(payload.get("category") or "")
+    category = CATEGORY_ALIASES.get(category, category)
+    subtype = str(payload.get("subtype") or "")
     key = (
         topic,
-        str(payload.get("category") or ""),
+        category,
+        subtype,
         str(payload.get("scenario") or ""),
         str(payload.get("audience") or ""),
     )
     if key in prep_hints_cache:
         return prep_hints_cache[key]
-    user = (
-        f"题目:{topic}\n题型:{key[1] or '通用'};场景:{key[2] or '汇报'};受众:{key[3] or '普通观众'}\n"
-        "请给出思考提示,只输出 JSON 数组。"
-    )
+    user = f"题目:{topic}\n题型:{category or '通用'};场景:{key[3] or '汇报'};受众:{key[4] or '普通观众'}\n"
+    if category == "公考面试":
+        framework = INTERVIEW_SUBTYPE_FRAMEWORKS.get(subtype)
+        if framework:
+            user += (
+                f"这是公考结构化面试题,子题型「{subtype}」。思考提示按该题型的参考框架给角度:{framework}"
+                "——每条提示对应框架的一个角度,只给角度不给答案。\n"
+            )
+        else:
+            user += (
+                "这是公考结构化面试题。思考提示按「表态—分析—对策—收尾」的通用框架给角度,只给角度不给答案。\n"
+            )
+    user += "请给出思考提示,只输出 JSON 数组。"
     try:
         content = llm_chat(
             [

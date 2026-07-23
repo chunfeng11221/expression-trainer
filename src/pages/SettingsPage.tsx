@@ -9,13 +9,17 @@ const ANSWER_OPTIONS = [
   { value: 30, label: '30秒' },
   { value: 60, label: '1分钟' },
   { value: 120, label: '2分钟' },
+  { value: 180, label: '3分钟' },
+  { value: 240, label: '4分钟' },
+  { value: 300, label: '5分钟' },
 ]
 const PREPARE_OPTIONS = [
   { value: 0, label: '0秒' },
   { value: 15, label: '15秒' },
   { value: 30, label: '30秒' },
+  { value: 60, label: '1分钟' },
 ]
-const SCENE_OPTIONS: Scene[] = ['汇报', '即兴', '面试', '申论']
+const SCENE_OPTIONS: Scene[] = ['汇报', '即兴', '面试', '公考面试']
 const AUDIENCE_OPTIONS: Audience[] = ['普通观众', '领导', '面试官', '专业人士']
 
 export default function SettingsPage() {
@@ -68,13 +72,13 @@ export default function SettingsPage() {
         '回答时间',
         ANSWER_OPTIONS,
         settings.answerSeconds,
-        (v) => setSettings((s) => ({ ...s, answerSeconds: v })),
+        (v) => setSettings((s) => ({ ...s, answerSeconds: v, timeCustomized: true })),
       )}
       {renderGroup(
         '准备时间',
         PREPARE_OPTIONS,
         settings.prepareSeconds,
-        (v) => setSettings((s) => ({ ...s, prepareSeconds: v })),
+        (v) => setSettings((s) => ({ ...s, prepareSeconds: v, timeCustomized: true })),
       )}
       {renderGroup(
         '场景',

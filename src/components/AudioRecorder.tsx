@@ -13,6 +13,8 @@ interface AudioRecorderProps {
   fillerCounts: Array<{ word: string; count: number }>
   /** 随心记模式:正计时、无倒计时、无自动停止 */
   freeMode?: boolean
+  /** 倒计时区域的时间含义标注,如面试模式的「作答时间」 */
+  timeLabel?: string
   onFinish: (blob: Blob | null, durationSeconds: number) => void
   /** 点击「重新开始」:父组件负责重置转写并以 key 重挂载本组件 */
   onRestart: () => void
@@ -25,6 +27,7 @@ export default function AudioRecorder({
   liveText,
   fillerCounts,
   freeMode = false,
+  timeLabel,
   onFinish,
   onRestart,
 }: AudioRecorderProps) {
@@ -104,7 +107,11 @@ export default function AudioRecorder({
 
       <div className="recorder-time">
         <span className="recorder-elapsed">{formatTime(elapsed)}</span>
-        {!freeMode && <span className="recorder-remaining">剩余 {formatTime(remaining)}</span>}
+        {!freeMode && (
+          <span className="recorder-remaining">
+            {timeLabel ? `${timeLabel} · ` : ''}剩余 {formatTime(remaining)}
+          </span>
+        )}
         {freeMode && <span className="recorder-remaining">不限时,说完点结束</span>}
       </div>
 

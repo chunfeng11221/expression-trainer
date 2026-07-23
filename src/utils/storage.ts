@@ -16,6 +16,27 @@ export const DEFAULT_SETTINGS: TrainingSettings = {
   audience: '普通观众',
 }
 
+/** 公考面试节奏:思考 60 秒、作答 3 分钟(行业通行惯例) */
+export const INTERVIEW_ANSWER_SECONDS = 180
+export const INTERVIEW_PREPARE_SECONDS = 60
+
+/**
+ * 面试节奏:公考面试题 + 用户没手动改过时间时,自动用「思考60秒/作答3分钟/场景=面试」。
+ * 用户在设置里改过时间(timeCustomized)就尊重用户设置。
+ */
+export function resolveTrainingSettings(
+  settings: TrainingSettings,
+  isInterview: boolean,
+): TrainingSettings {
+  if (!isInterview || settings.timeCustomized) return settings
+  return {
+    ...settings,
+    answerSeconds: INTERVIEW_ANSWER_SECONDS,
+    prepareSeconds: INTERVIEW_PREPARE_SECONDS,
+    scene: '面试',
+  }
+}
+
 function readJson<T>(key: string): T | null {
   try {
     const raw = localStorage.getItem(key)
@@ -35,7 +56,10 @@ function writeJson(key: string, value: unknown): void {
 
 export function loadSettings(): TrainingSettings {
   const saved = readJson<Partial<TrainingSettings>>(KEYS.settings)
-  return { ...DEFAULT_SETTINGS, ...(saved ?? {}) }
+  const merged = { ...DEFAULT_SETTINGS, ...(saved ?? {}) }
+  // 历史数据兼容:旧版本场景有「申论」,按「面试」处理
+  if ((merged.scene as string) === '申论') merged.scene = '面试'
+  return merged
 }
 
 export function saveSettings(settings: TrainingSettings): void {

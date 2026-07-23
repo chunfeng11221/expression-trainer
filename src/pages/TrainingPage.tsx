@@ -4,7 +4,7 @@ import { Play } from 'lucide-react'
 import AudioRecorder from '../components/AudioRecorder'
 import Countdown from '../components/Countdown'
 import { mockTranscript, mockTranscriptImproved } from '../data/mockAnalysis'
-import { isFreeTopic } from '../data/topics'
+import { isFreeTopic, isInterviewTopic } from '../data/topics'
 import { analyzeWithAI, fetchPrepHints } from '../services/aiAnalysisService'
 import type { AsrSegment, WordTimestamp } from '../services/analysisService'
 import {
@@ -22,6 +22,7 @@ import {
   loadAttempts,
   loadSession,
   loadSettings,
+  resolveTrainingSettings,
   saveAttempt,
   saveAudioBlob,
   saveHistoryEntry,
@@ -42,7 +43,11 @@ const MIN_REAL_TRANSCRIPT_CHARS = 15
 export default function TrainingPage() {
   const navigate = useNavigate()
   const [session, setSession] = useState<TrainingSession | null>(() => loadSession())
-  const settings = useMemo(() => loadSettings(), [])
+  // 公考面试题且用户未手动改过时间时,自动采用面试节奏(思考60秒/作答3分钟/场景=面试)
+  const settings = useMemo(
+    () => resolveTrainingSettings(loadSettings(), isInterviewTopic(loadSession()?.topic ?? {})),
+    [],
+  )
   // 刷新后 recording/analyzing 无法恢复(麦克风与音频都已释放),回到准备阶段重来
   const [phase, setPhase] = useState<TrainingPhase>('preparing')
   const [analyzingHint, setAnalyzingHint] = useState('正在分析你的表达……')
@@ -58,6 +63,7 @@ export default function TrainingPage() {
   }, [session?.attemptNumber])
 
   const isFree = session ? isFreeTopic(session.topic) : false
+  const isInterview = session ? isInterviewTopic(session.topic) : false
 
   // 随心记:不出题不准备,直接进录音
   useEffect(() => {
@@ -73,6 +79,7 @@ export default function TrainingPage() {
     void fetchPrepHints({
       topic: session.topic.title,
       category: session.topic.category,
+      subtype: session.topic.subtype,
       scenario: settings.scene,
       audience: settings.audience,
     }).then((hints) => {
@@ -240,6 +247,7 @@ export default function TrainingPage() {
           freeMode={isFree}
           liveText={liveText}
           fillerCounts={fillerCounts}
+          timeLabel={isInterview ? '作答时间' : undefined}
           onFinish={handleFinish}
           onRestart={handleRestart}
         />
@@ -253,7 +261,13 @@ export default function TrainingPage() {
   return (
     <div className="page page-center preparing">
       <p className="preparing-label">
-        {session.attemptNumber === 2 ? '第二次回答 · 同一个题目' : '准备一下'}
+        {session.attemptNumber === 2
+          ? isInterview
+            ? '第二次作答 · 同一个题目'
+            : '第二次回答 · 同一个题目'
+          : isInterview
+            ? '思考时间'
+            : '准备一下'}
       </p>
       <h1 className="preparing-topic">{session.topic.title}</h1>
       <p className="preparing-meta">
@@ -266,7 +280,9 @@ export default function TrainingPage() {
       <Countdown seconds={settings.prepareSeconds} onComplete={startRecording} />
 
       <div className="tips-box">
-        <h2>用这 15 秒只想这几件事</h2>
+        <h2>
+          用这 {settings.prepareSeconds >= 60 ? `${settings.prepareSeconds / 60} 分钟` : `${settings.prepareSeconds} 秒`} 只想这几件事
+        </h2>
         <ol>
           {tips.map((tip) => (
             <li key={tip}>{tip}</li>

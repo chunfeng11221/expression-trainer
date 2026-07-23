@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Check, Copy, Download, GitCompareArrows, Home, LayoutList, Mic, RotateCcw } from 'lucide-react'
 import ResultSections from '../components/ResultSections'
-import { getTopicById, isFreeTopic } from '../data/topics'
+import { getTopicById, isFreeTopic, isInterviewTopic } from '../data/topics'
 import { copyText, downloadTranscriptTxt, plainTranscript } from '../utils/transcriptText'
-import { loadAttempts, loadAudioBlob, loadSettings, saveSession } from '../utils/storage'
+import { loadAttempts, loadAudioBlob, loadSettings, resolveTrainingSettings, saveSession } from '../utils/storage'
 
 export default function ResultPage() {
   const navigate = useNavigate()
@@ -35,6 +35,11 @@ export default function ResultPage() {
   const { analysis } = attempt
   const isFree = attempt.topicCategory === '随心记' || isFreeTopic({ id: attempt.topicId, category: attempt.topicCategory ?? '日常' })
   const canRetry = attempt.attemptNumber === 1 && !isFree
+  // 公考面试题在面试节奏下作答时限是 3 分钟(用户改过时间则尊重用户)
+  const limitSeconds = resolveTrainingSettings(
+    settings,
+    isInterviewTopic({ category: attempt.topicCategory }),
+  ).answerSeconds
 
   const startSecondAttempt = () => {
     const first = loadAttempts().first
@@ -76,7 +81,7 @@ export default function ResultPage() {
 
       <ResultSections
         analysis={analysis}
-        limitSeconds={settings.answerSeconds}
+        limitSeconds={limitSeconds}
         audioUrl={audioUrl}
         category={attempt.topicCategory ?? getTopicById(attempt.topicId)?.category}
       />

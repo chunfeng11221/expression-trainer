@@ -269,6 +269,11 @@ p {
   border-color: #e3b7ae;
 }
 
+.chip-subtype {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
 /* ---------- 准备阶段 ---------- */
 
 .preparing-label {

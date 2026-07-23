@@ -57,6 +57,7 @@ export async function analyzeWithAI(input: AIAnalyzeInput): Promise<AnalysisResu
  */export async function fetchPrepHints(input: {
   topic: string
   category?: string
+  subtype?: string
   scenario: string
   audience: string
 }): Promise<string[] | null> {
@@ -110,6 +111,7 @@ function buildRequest(input: AIAnalyzeInput, baseline: AnalysisResult) {
   return {
     topic: input.topic.title,
     category: input.topic.category ?? '通用',
+    subtype: input.topic.subtype,
     scenario: input.scenario,
     audience: input.audience,
     durationSeconds: m.durationSeconds,

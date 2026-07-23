@@ -55,6 +55,7 @@ export default function TopicPage() {
             <span className="topic-title">{topic.title}</span>
             <span className="topic-meta">
               <span className="chip">{topic.category}</span>
+              {topic.subtype && <span className="chip chip-subtype">{topic.subtype}</span>}
               <span className={`chip ${DIFFICULTY_CLASS[topic.difficulty]}`}>{topic.difficulty}</span>
             </span>
           </button>

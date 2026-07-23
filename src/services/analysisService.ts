@@ -50,7 +50,7 @@ export interface AnalyzeInput {
   transcriptText: string
   durationSeconds: number
   /** category 可选:本地启发式不用它,AI 分析按题型适配 */
-  topic: Pick<Topic, 'title'> & Partial<Pick<Topic, 'category'>>
+  topic: Pick<Topic, 'title'> & Partial<Pick<Topic, 'category' | 'subtype'>>
   limitSeconds?: number
   /** 实时转写阶段拿到的片段(带估算时间),有则优先使用 */
   liveSegments?: LiveSegment[]
