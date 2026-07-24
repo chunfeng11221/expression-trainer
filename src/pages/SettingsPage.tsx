@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Check } from 'lucide-react'
 import AiSetupCard from '../components/AiSetupCard'
+import ServerUrlCard from '../components/ServerUrlCard'
+import { isNativeApp } from '../services/apiBase'
 import type { Audience, Scene, TrainingSettings } from '../types/training'
 import { loadSettings, saveSettings } from '../utils/storage'
 
@@ -102,6 +104,13 @@ export default function SettingsPage() {
           '保存设置'
         )}
       </button>
+
+      {isNativeApp() && (
+        <section className="settings-group server-section">
+          <h2>服务器地址</h2>
+          <ServerUrlCard />
+        </section>
+      )}
 
       <section className="settings-group ai-section">
         <h2>AI 接入</h2>

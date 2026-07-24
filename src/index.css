@@ -1468,3 +1468,329 @@ p {
   color: var(--primary);
   font-size: 12px;
 }
+
+/* ---------- 安卓 App 服务器引导 ---------- */
+
+.server-guide-list {
+  margin: 0 0 14px;
+  padding-left: 22px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.server-guide .btn {
+  width: 100%;
+}
+
+/* ---------- 移动端适配(≤768px;桌面端样式不受影响) ---------- */
+
+@media (max-width: 768px) {
+  /* 布局与通用触控目标(≥44px) */
+  .page {
+    padding: 28px 16px 64px;
+  }
+
+  .page-header {
+    margin-bottom: 20px;
+  }
+
+  .link-back {
+    padding: 10px 0;
+  }
+
+  .btn {
+    min-height: 44px;
+  }
+
+  .tab {
+    padding: 10px 18px;
+    min-height: 44px;
+    flex-shrink: 0;
+  }
+
+  .settings-option {
+    padding: 10px 18px;
+    min-height: 44px;
+  }
+
+  .home-footer a {
+    display: inline-block;
+    padding: 8px 4px;
+  }
+
+  /* 首页 */
+  .home {
+    padding-top: 8vh;
+  }
+
+  .home-title {
+    font-size: 30px;
+  }
+
+  .home-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    max-width: 340px;
+    gap: 12px;
+    margin: 32px 0 20px;
+  }
+
+  .home-settings {
+    margin-top: 32px;
+  }
+
+  .ai-setup-card {
+    padding: 18px;
+  }
+
+  /* 选题页:分类 tab 横向滑动,卡片标题与标签上下排 */
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 6px;
+    margin-bottom: 18px;
+  }
+
+  .history-filter {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+  .topic-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 16px 18px;
+  }
+
+  .topic-meta {
+    flex-wrap: wrap;
+  }
+
+  /* 准备页 */
+  .preparing-topic {
+    font-size: 22px;
+  }
+
+  .countdown {
+    font-size: 64px;
+    margin: 24px 0 6px;
+  }
+
+  .tips-box,
+  .goals-box {
+    padding: 16px 20px;
+  }
+
+  .preparing .btn-lg {
+    width: 100%;
+    max-width: 340px;
+  }
+
+  /* 录音页:大字计时,「结束录音」大号主按钮 */
+  .recorder {
+    padding-top: 2vh;
+  }
+
+  .recorder-topic {
+    font-size: 17px;
+    margin-bottom: 20px;
+  }
+
+  .recorder-elapsed {
+    font-size: 46px;
+  }
+
+  .recorder-time {
+    gap: 10px;
+  }
+
+  .volume-track {
+    margin: 22px 0;
+  }
+
+  .live-transcript {
+    max-height: 120px;
+  }
+
+  .filler-corner {
+    top: 10px;
+    right: 12px;
+  }
+
+  .filler-chip {
+    font-size: 12px;
+  }
+
+  .recorder-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    max-width: 340px;
+    gap: 12px;
+    margin-top: 28px;
+  }
+
+  .recorder-actions .btn-primary {
+    min-height: 60px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  .recorder-error {
+    padding-top: 8vh;
+  }
+
+  /* 分析中 */
+  .analyzing-text {
+    font-size: 16px;
+    padding: 0 8px;
+  }
+
+  /* 结果页:数据网格改单列,卡片收紧 */
+  .diagnosis {
+    padding: 16px 18px;
+  }
+
+  .diagnosis-text {
+    font-size: 16px;
+  }
+
+  .score-card {
+    padding: 16px 18px;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .feedback-card {
+    padding: 16px 18px;
+  }
+
+  .outline-list {
+    padding: 16px 20px 16px 42px;
+  }
+
+  .transcript-segment {
+    padding: 12px 14px;
+  }
+
+  .result-actions .btn-xl {
+    width: 100%;
+    max-width: 340px;
+  }
+
+  .result-mid-cta .btn-lg {
+    width: 100%;
+    max-width: 340px;
+  }
+
+  /* 对比页:音频上下排,对比行卡片化 */
+  .compare-audios {
+    flex-direction: column;
+  }
+
+  .comparison-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 14px 18px;
+  }
+
+  .comparison-delta {
+    text-align: left;
+  }
+
+  /* 历史页:网格行改弹性换行卡片 */
+  .history-row {
+    display: flex;
+    flex-wrap: wrap;
+    row-gap: 8px;
+    padding: 14px 16px;
+  }
+
+  .history-date {
+    order: 1;
+  }
+
+  .history-source {
+    order: 2;
+    margin-left: auto;
+  }
+
+  .history-topic {
+    order: 3;
+    flex-basis: 100%;
+    white-space: normal;
+  }
+
+  .history-attempts {
+    order: 4;
+    flex-basis: 100%;
+    flex-wrap: wrap;
+  }
+
+  .history-fillers {
+    order: 5;
+  }
+
+  .history-attempt-chip {
+    padding: 8px 14px;
+  }
+
+  .history-compare-link {
+    align-self: flex-end;
+    padding: 8px 4px;
+  }
+
+  .history-row-wrapper {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+  }
+
+  .history-detail-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .history-detail-header .result-attempt-label {
+    display: block;
+    margin-top: 4px;
+  }
+
+  /* 进步表格:摘要收紧,表格横向滚动,趋势图自适应 */
+  .progress-summary {
+    gap: 18px 28px;
+    padding: 12px 0 18px;
+  }
+
+  .summary-tagline {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+
+  .trend-legend {
+    flex-wrap: wrap;
+  }
+
+  .trend-chart {
+    height: 140px;
+  }
+
+  .progress-table-wrapper {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 设置页 */
+  .settings-save {
+    width: 100%;
+    max-width: 340px;
+  }
+
+  .ai-actions {
+    flex-wrap: wrap;
+  }
+}

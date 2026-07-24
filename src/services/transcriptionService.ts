@@ -3,6 +3,7 @@
  * 浏览器不支持时 isSpeechRecognitionSupported() 返回 false,
  * 上层应降级到 mockAnalysis 中的模拟文字稿,保证流程完整。
  */
+import { apiUrl } from './apiBase'
 
 export interface LiveSegment {
   id: string
@@ -166,7 +167,7 @@ export interface WhisperResult {
 /** 查询后端 ASR 是否就绪;任何异常都返回 false(调用方静默降级) */
 export async function checkAsrReady(): Promise<boolean> {
   try {
-    const res = await fetch('/api/health')
+    const res = await fetch(apiUrl('/api/health'))
     if (!res.ok) return false
     const data: unknown = await res.json()
     return (
@@ -192,7 +193,7 @@ export async function transcribeAudio(
     const timer = window.setTimeout(() => controller.abort(), timeoutMs)
     let res: Response
     try {
-      res = await fetch('/api/transcribe', {
+      res = await fetch(apiUrl('/api/transcribe'), {
         method: 'POST',
         headers: { 'Content-Type': blob.type || 'application/octet-stream' },
         body: blob,

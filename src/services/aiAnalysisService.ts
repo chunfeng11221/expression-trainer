@@ -8,6 +8,7 @@
 import type { AnalysisResult, FeedbackItem } from '../types/analysis'
 import { overallScore } from '../utils/scoring'
 import { analyzeTranscript, type AnalyzeInput } from './analysisService'
+import { apiUrl } from './apiBase'
 import { formatTime } from './transcriptionService'
 
 const REQUEST_TIMEOUT_MS = 95_000
@@ -33,7 +34,7 @@ export async function analyzeWithAI(input: AIAnalyzeInput): Promise<AnalysisResu
     const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     let res: Response
     try {
-      res = await fetch('/api/analyze', {
+      res = await fetch(apiUrl('/api/analyze'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(buildRequest(input, baseline)),
@@ -66,7 +67,7 @@ export async function analyzeWithAI(input: AIAnalyzeInput): Promise<AnalysisResu
     const timer = window.setTimeout(() => controller.abort(), 30_000)
     let res: Response
     try {
-      res = await fetch('/api/prep-hints', {
+      res = await fetch(apiUrl('/api/prep-hints'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
@@ -210,7 +211,7 @@ export interface AiConfigInfo {
 
 export async function fetchAiConfig(): Promise<AiConfigInfo | null> {
   try {
-    const res = await fetch('/api/config')
+    const res = await fetch(apiUrl('/api/config'))
     if (!res.ok) return null
     const data: unknown = await res.json()
     if (typeof data !== 'object' || data === null || (data as { ok?: unknown }).ok !== true) {
@@ -229,7 +230,7 @@ export interface HealthInfo {
 
 export async function fetchHealth(): Promise<HealthInfo | null> {
   try {
-    const res = await fetch('/api/health')
+    const res = await fetch(apiUrl('/api/health'))
     if (!res.ok) return null
     const data: unknown = await res.json()
     if (typeof data !== 'object' || data === null) return null
@@ -249,7 +250,7 @@ export interface AiConfigSavePayload {
 
 async function postJson(path: string, payload: unknown): Promise<{ ok: boolean; reason?: string; model?: string }> {
   try {
-    const res = await fetch(path, {
+    const res = await fetch(apiUrl(path), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

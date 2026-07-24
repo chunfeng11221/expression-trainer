@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">表达力训练器</string>
+    <string name="title_activity_main">表达力训练器</string>
+    <string name="package_name">com.expressiontrainer.app</string>
+    <string name="custom_url_scheme">com.expressiontrainer.app</string>
+</resources>

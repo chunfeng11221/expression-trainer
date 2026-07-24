@@ -28,3 +28,11 @@ venv/
 __pycache__/
 models/
 server/ai.config.json
+
+# Android / Capacitor(源码入库,构建产物与本地配置不入库)
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+*.apk
+local.properties

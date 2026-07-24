@@ -9,7 +9,8 @@
                           返回 {"ok": true, "segments": [...], "words": [...]}
 - 其余路径             -> 静态托管 dist/(SPA fallback 到 index.html)
 
-启动:venv/Scripts/python.exe server/app.py   (绑定 127.0.0.1:8788)
+启动:venv/Scripts/python.exe server/app.py   (默认绑定 127.0.0.1:8788)
+联机:HOST=0.0.0.0(或 --lan)绑定局域网,手机浏览器可访问;PORT 环境变量(或 --port)改端口。
 鉴权:KIMI_API_KEY 环境变量,或 ~/.kimi/agent-gw.json;无 key 时 LLM 不可用,应用照常可跑。
 ASR :需 pip install faster-whisper;模型默认 small,可用 WHISPER_MODEL 覆盖,
       缓存在项目 models/ 目录;模型不可用时 /api/transcribe 返回 ok:false,前端自动降级。
@@ -30,8 +31,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DIST_DIR = ROOT / "dist"
 MODELS_DIR = ROOT / "models"
-HOST = "127.0.0.1"
-PORT = 8788
+
+
+def _cli_value(flag: str) -> str | None:
+    """取 --flag value 形式的命令行参数;没有返回 None。"""
+    if flag in sys.argv:
+        i = sys.argv.index(flag)
+        if i + 1 < len(sys.argv):
+            return sys.argv[i + 1]
+    return None
+
+
+# 绑定地址:--host > HOST 环境变量 > --lan(0.0.0.0)> 默认仅本机
+HOST = _cli_value("--host") or os.environ.get("HOST") or (
+    "0.0.0.0" if "--lan" in sys.argv else "127.0.0.1"
+)
+PORT = int(_cli_value("--port") or os.environ.get("PORT") or "8788")
 MODEL = "kimi-for-coding"
 LLM_TIMEOUT = 90  # 秒
 WHISPER_MODEL_NAME = os.environ.get("WHISPER_MODEL", "small")
@@ -758,8 +773,20 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        # 安卓 App 的 WebView 与电脑端 API 跨源(局域网 http),放开 CORS
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        """CORS 预检(App WebView 跨源调 /api/* 时浏览器先发 OPTIONS)。"""
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "86400")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def read_body(self) -> bytes:
         length = int(self.headers.get("Content-Length") or 0)
@@ -856,6 +883,22 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
+def detect_lan_ip() -> str | None:
+    """探测本机局域网 IP(UDP 连接外部地址,不实际发包);失败返回 None。"""
+    import socket
+
+    sock = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.connect(("223.5.5.5", 53))  # 阿里 DNS,只用于确定出口网卡
+        return sock.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        if sock is not None:
+            sock.close()
+
+
 def main():
     # CLI:`python server/app.py --prefetch-model` 只下载语音模型后退出(安装脚本用)
     if "--prefetch-model" in sys.argv:
@@ -875,7 +918,18 @@ def main():
         mode = f"LLM: Kimi agent-gw({MODEL})"
     else:
         mode = f"LLM 不可用({llm_init_error}),本地启发式兜底"
-    print(f"表达力训练器后端启动: http://{HOST}:{PORT}  [{mode}]", flush=True)
+    display_host = HOST
+    lan_ip = None
+    if HOST in ("0.0.0.0", "::"):
+        lan_ip = detect_lan_ip()
+        display_host = lan_ip or "0.0.0.0"
+    print(f"表达力训练器后端启动: http://{display_host}:{PORT}  [{mode}]", flush=True)
+    if HOST in ("0.0.0.0", "::"):
+        # 局域网联机模式:手机与电脑同一 Wi-Fi 时可直接访问
+        print("联机模式:已监听所有网卡。", flush=True)
+        if lan_ip:
+            print(f"  手机/其他设备请打开: http://{lan_ip}:{PORT}", flush=True)
+        print(f"  本机仍可用: http://127.0.0.1:{PORT}", flush=True)
     print(f"ffmpeg: {FFMPEG or '未找到'}", flush=True)
     if asr_status == "loading":
         print(f"ASR: 后台加载 faster-whisper 模型 {WHISPER_MODEL_NAME} ...", flush=True)
@@ -888,7 +942,7 @@ def main():
         server = ThreadingHTTPServer((HOST, PORT), Handler)
     except OSError:
         print(f"端口 {PORT} 被占用了:训练器可能已经在运行。", flush=True)
-        print(f"直接在浏览器打开 http://{HOST}:{PORT} 试试;确认没在运行就关掉占用该端口的程序。", flush=True)
+        print(f"直接在浏览器打开 http://127.0.0.1:{PORT} 试试;确认没在运行就关掉占用该端口的程序。", flush=True)
         sys.exit(1)
     server.serve_forever()
 

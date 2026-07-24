@@ -4,6 +4,7 @@ import { Feather, LayoutList, Shuffle } from 'lucide-react'
 import AiSetupCard from '../components/AiSetupCard'
 import { FREE_TOPIC, getRandomTopic } from '../data/topics'
 import { fetchHealth } from '../services/aiAnalysisService'
+import { isNativeApp } from '../services/apiBase'
 import { loadAttempts, loadHistory, loadSession, loadSettings, saveSession, INTERVIEW_ANSWER_SECONDS, INTERVIEW_PREPARE_SECONDS } from '../utils/storage'
 import { computePracticeStats, practiceStatsText } from '../utils/practiceStats'
 
@@ -17,9 +18,14 @@ export default function HomePage() {
   const session = loadSession()
   const attempts = loadAttempts()
   const [llmReady, setLlmReady] = useState<boolean | null>(null)
+  const [serverDown, setServerDown] = useState(false)
 
   useEffect(() => {
-    void fetchHealth().then((h) => setLlmReady(h ? h.llm : null))
+    void fetchHealth().then((h) => {
+      setLlmReady(h ? h.llm : null)
+      // 安卓 App 里 health 失败 = 连不上电脑服务器,给出引导;浏览器里无此场景
+      setServerDown(!h && isNativeApp())
+    })
   }, [])
 
   const startRandom = () => {
@@ -79,6 +85,21 @@ export default function HomePage() {
       )}
 
       {llmReady === false && <AiSetupCard onSaved={() => setLlmReady(true)} />}
+
+      {serverDown && (
+        <div className="ai-setup-card server-guide">
+          <p className="ai-setup-title">连不上电脑服务器</p>
+          <ol className="server-guide-list">
+            <li>电脑上双击「启动训练器-手机联机.bat」</li>
+            <li>手机和电脑连同一个 Wi-Fi</li>
+            <li>到「设置 → 服务器地址」填电脑上显示的地址,点「测试连接」</li>
+          </ol>
+          <Link to="/settings" className="btn btn-primary">
+            去设置服务器地址
+          </Link>
+          <p className="ai-note">连不上也能先练:分析会用 App 内置的本地规则。</p>
+        </div>
+      )}
 
       <p className="home-settings">
         {settings.timeCustomized ? (
