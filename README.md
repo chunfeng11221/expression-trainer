@@ -99,7 +99,7 @@ android/  capacitor.config.ts  安卓 App 壳(Capacitor 8,webDir=dist)
 | `GET /api/config` | 当前 AI 配置(key 只回末 4 位) |
 | `POST /api/config` | 保存 AI 配置并热切换(不重启) |
 | `POST /api/config/test` | 用传入/已存配置发最小请求测连通 |
-| `POST /api/analyze` | 表达分析(带五类题型 rubric、分数锚点与数据硬约束) |
+| `POST /api/analyze` | 表达分析(带五类题型 rubric、分数锚点与数据硬约束;rubric 融入表达课方法论:听众对接、框架与路标、核心句与减法、具象程度) |
 | `POST /api/prep-hints` | 准备阶段的针对性思考提示(服务端缓存) |
 | `POST /api/transcribe` | faster-whisper 转写,返回分段 + 词级时间戳 |
 
