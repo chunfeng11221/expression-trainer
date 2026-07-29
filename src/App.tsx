@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import ComparisonPage from './pages/ComparisonPage'
+import CoursePage from './pages/CoursePage'
 import HistoryComparePage from './pages/HistoryComparePage'
 import HistoryDetailPage from './pages/HistoryDetailPage'
 import HistoryPage from './pages/HistoryPage'
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/train" element={<TrainingPage />} />
         <Route path="/result" element={<ResultPage />} />
         <Route path="/compare" element={<ComparisonPage />} />
+        <Route path="/course" element={<CoursePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/history/compare/:sessionId" element={<HistoryComparePage />} />

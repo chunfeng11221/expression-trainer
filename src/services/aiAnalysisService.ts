@@ -16,6 +16,8 @@ const REQUEST_TIMEOUT_MS = 95_000
 export interface AIAnalyzeInput extends AnalyzeInput {
   scenario: string
   audience: string
+  /** 准备阶段选定的表达框架(如「空雨伞:事实—分析—行动」);评判时参考落实情况 */
+  intendedFramework?: string
 }
 
 interface LlmResult {
@@ -115,6 +117,7 @@ function buildRequest(input: AIAnalyzeInput, baseline: AnalysisResult) {
     subtype: input.topic.subtype,
     scenario: input.scenario,
     audience: input.audience,
+    intendedFramework: input.intendedFramework,
     durationSeconds: m.durationSeconds,
     transcript: buildTimedTranscript(baseline),
     metrics: {

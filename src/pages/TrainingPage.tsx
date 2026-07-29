@@ -37,6 +37,39 @@ const THINKING_TIPS = [
   '最后如何总结?',
 ]
 
+/** 准备阶段可选的三套表达框架(出自表达课视频13/16;文案见 courseConcepts.ts 对应卡片) */
+const PREP_FRAMEWORKS = [
+  {
+    id: 'time',
+    short: '过去—现在—未来',
+    name: '过去—现在—未来',
+    desc: '即兴谈看法的万能框架:过去问"为什么"(什么经历造就这感受),未来问"我希望"(希望听众如何行动),比例不必 1:1:1。',
+  },
+  {
+    id: 'umbrella',
+    short: '空雨伞',
+    name: '空雨伞:事实—分析—行动',
+    desc: '先摆事实背景(空),再指出问题(雨),最后给行动方案(伞);可换序、可调比例。',
+  },
+  {
+    id: '3c',
+    short: '3C',
+    name: '3C:现状—冲突—行动',
+    desc: '抛出现状问题,用"有人觉得"铺垫共识,再用"但我觉得"亮明主张、形成鲜明对比。',
+  },
+]
+
+/** 公考面试题 subtype → 参考框架(与 server/app.py 的 INTERVIEW_SUBTYPE_FRAMEWORKS 同一份对照) */
+const INTERVIEW_FRAMEWORKS: Record<string, string> = {
+  社会现象: '九宫格:态度评价 / 背景影响 / 原因 / 问题对策',
+  态度观点: '三板斧:先分析 a,再分析 b,最后辩证统一',
+  计划组织: '明确目的 — 筹备 — 开展 — 总结',
+  应急应变: '稳定局面 — 轻重缓急 — 逐一解决 — 复盘预防',
+  人际关系: '理解尊重 — 沟通换位 — 解决 — 自省',
+  情景模拟: '开场白 — 动之以情晓之以理 — 给出办法 — 自然收尾',
+  其他: '是什么 — 为什么 — 怎么办',
+}
+
 /** 实时转写低于该字数时,降级使用内置文字稿,保证流程完整 */
 const MIN_REAL_TRANSCRIPT_CHARS = 15
 
@@ -55,6 +88,7 @@ export default function TrainingPage() {
   const [liveSegments, setLiveSegments] = useState<LiveSegment[]>([])
   const [interim, setInterim] = useState('')
   const [tips, setTips] = useState<string[]>(THINKING_TIPS)
+  const [frameworkId, setFrameworkId] = useState<string | null>(null)
   const transcriberRef = useRef<SpeechTranscriber | null>(null)
 
   const improvementGoals = useMemo(() => {
@@ -64,6 +98,7 @@ export default function TrainingPage() {
 
   const isFree = session ? isFreeTopic(session.topic) : false
   const isInterview = session ? isInterviewTopic(session.topic) : false
+  const selectedFramework = PREP_FRAMEWORKS.find((f) => f.id === frameworkId) ?? null
 
   // 随心记:不出题不准备,直接进录音
   useEffect(() => {
@@ -195,6 +230,7 @@ export default function TrainingPage() {
         asrSegments,
         scenario: settings.scene,
         audience: settings.audience,
+        intendedFramework: !isInterview && selectedFramework ? selectedFramework.name : undefined,
       })
       const sessionId = session.sessionId ?? crypto.randomUUID()
       saveAttempt({
@@ -261,6 +297,9 @@ export default function TrainingPage() {
           onFinish={handleFinish}
           onRestart={handleRestart}
         />
+        {selectedFramework && !isInterview && (
+          <p className="framework-note">框架:{selectedFramework.short}</p>
+        )}
         {!isSpeechRecognitionSupported() && (
           <p className="recorder-asr-note">当前浏览器不支持实时字幕(建议用 Chrome/Edge);没有字幕不影响最终分析。</p>
         )}
@@ -302,6 +341,32 @@ export default function TrainingPage() {
           ))}
         </ol>
       </div>
+
+      {!isInterview ? (
+        <div className="framework-box">
+          <h2>搭个框架(可选)</h2>
+          <div className="framework-cards">
+            {PREP_FRAMEWORKS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                className={`framework-card ${frameworkId === f.id ? 'framework-active' : ''}`}
+                onClick={() => setFrameworkId((cur) => (cur === f.id ? null : f.id))}
+              >
+                <span className="framework-name">{f.name}</span>
+                {frameworkId === f.id && <span className="framework-desc">{f.desc}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        session.topic.subtype && (
+          <div className="framework-box">
+            <h2>参考框架({session.topic.subtype})</h2>
+            <p className="framework-interview">{INTERVIEW_FRAMEWORKS[session.topic.subtype]}</p>
+          </div>
+        )
+      )}
 
       {improvementGoals.length > 0 && (
         <div className="goals-box">

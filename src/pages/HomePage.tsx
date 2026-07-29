@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { Feather, LayoutList, Shuffle } from 'lucide-react'
+import { Feather, BookOpen, LayoutList, Shuffle } from 'lucide-react'
 import AiSetupCard from '../components/AiSetupCard'
 import { FREE_TOPIC, getRandomTopic } from '../data/topics'
 import { fetchHealth } from '../services/aiAnalysisService'
@@ -67,10 +67,15 @@ export default function HomePage() {
       </div>
 
       <div className="home-free">
-        <button type="button" className="btn btn-ghost home-free-btn" onClick={startFree}>
-          <Feather size={15} /> 随心记
-        </button>
-        <p className="home-free-note">想说什么都行,没有题目,不限时间</p>
+        <div className="home-free-actions">
+          <button type="button" className="btn btn-ghost home-free-btn" onClick={startFree}>
+            <Feather size={15} /> 随心记
+          </button>
+          <Link to="/course" className="btn btn-ghost home-free-btn">
+            <BookOpen size={15} /> 表达课
+          </Link>
+        </div>
+        <p className="home-free-note">随心记:想说什么都行,不限时间 · 表达课:44 节课蒸馏成开口前能用的方法</p>
       </div>
 
       {session && (

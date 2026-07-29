@@ -380,6 +380,11 @@ def build_user_prompt(payload: dict) -> str:
         lines.append(
             "summary 和 improvements 的措辞要贴题型:介绍/工作类谈\"核心信息是否讲清、信息是否具体\",不要谈\"立场是否明确\"。"
         )
+    intended = str(payload.get("intendedFramework") or "").strip()
+    if intended:
+        lines.append(
+            f"用户准备时打算用「{intended}」框架,评判时可参考其落实情况(未落实不强扣分,只提示)。"
+        )
     lines += [
         "",
         "本地统计指标(已由程序准确计算,请采信):",

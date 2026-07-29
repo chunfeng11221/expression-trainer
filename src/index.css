@@ -1482,6 +1482,164 @@ p {
   width: 100%;
 }
 
+/* ---------- 表达课 ---------- */
+
+.home-free-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.course-intro {
+  color: var(--muted);
+  margin-bottom: 28px;
+}
+
+.course-module {
+  margin-bottom: 32px;
+}
+
+.course-module-title {
+  font-size: 16px;
+  margin-bottom: 12px;
+  padding-left: 10px;
+  border-left: 3px solid var(--primary);
+}
+
+.concept-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.concept-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+
+.concept-card h3 {
+  font-size: 15px;
+  color: var(--primary);
+  margin-bottom: 6px;
+}
+
+.concept-card p {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.concept-card .concept-usage {
+  color: var(--text);
+  margin-top: 6px;
+}
+
+.concept-card .concept-source {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-top: 8px;
+}
+
+.course-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 36px;
+}
+
+/* 结果页里的表达课方法卡(缩小一号) */
+.concept-card.compact {
+  padding: 12px 16px;
+}
+
+.concept-card.compact h3 {
+  font-size: 14px;
+}
+
+.concept-card.compact p {
+  font-size: 13px;
+}
+
+.course-more {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.course-more a {
+  color: var(--primary);
+}
+
+/* 准备阶段:搭个框架(可选) */
+.framework-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 28px;
+  margin-top: 20px;
+  text-align: left;
+  max-width: 460px;
+  width: 100%;
+}
+
+.framework-box h2 {
+  font-size: 15px;
+  margin-bottom: 12px;
+}
+
+.framework-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.framework-card {
+  text-align: left;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+}
+
+.framework-card:hover {
+  border-color: var(--primary);
+}
+
+.framework-card.framework-active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.framework-name {
+  font-size: 14px;
+}
+
+.framework-desc {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* 公考面试模式:subtype 对应的参考框架(不可点) */
+.framework-interview {
+  font-size: 14px;
+  color: var(--text);
+  border: 1px solid var(--primary);
+  background: var(--primary-soft);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+/* 录音页轻量提示所选框架 */
+.framework-note {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 12px;
+}
+
 /* ---------- 移动端适配(≤768px;桌面端样式不受影响) ---------- */
 
 @media (max-width: 768px) {
@@ -1582,6 +1740,14 @@ p {
   .tips-box,
   .goals-box {
     padding: 16px 20px;
+  }
+
+  .framework-box {
+    padding: 16px 20px;
+  }
+
+  .concept-grid {
+    grid-template-columns: 1fr;
   }
 
   .preparing .btn-lg {

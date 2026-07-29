@@ -2,6 +2,8 @@ import { useRef, type ReactNode } from 'react'
 import type { AnalysisResult } from '../types/analysis'
 import type { Category } from '../types/training'
 import { normalizeCategory } from '../types/training'
+import { Link } from 'react-router-dom'
+import { getConceptById } from '../data/courseConcepts'
 import { formatTime } from '../services/transcriptionService'
 import { seekAudio } from '../utils/audioSeek'
 import ScoreCard from './ScoreCard'
@@ -24,6 +26,22 @@ const STRUCTURE_HINTS: Partial<Record<Category, string>> = {
 const CONTENT_HINTS: Partial<Record<Category, string>> = {
   公考面试: '分析与对策',
 }
+
+/** 最低分维度 → 「表达课」对应方法卡(确定性映射,不调 LLM;卡片出自 courseConcepts.ts) */
+const DIMENSION_REMEDIES: Record<keyof AnalysisResult['scores'], string[]> = {
+  viewpoint: ['motivation', 'audience-purposes'],
+  structure: ['framework-time', 'transition'],
+  content: ['core-sentence', 'concrete-expression'],
+  fluency: ['practice-framework'],
+}
+const DIMENSION_LABELS: Record<keyof AnalysisResult['scores'], string> = {
+  viewpoint: '观点',
+  structure: '结构',
+  content: '内容',
+  fluency: '流畅度',
+}
+/** 四项分不低于该值时,认为没有明显短板 */
+const NO_WEAKNESS_THRESHOLD = 85
 
 interface ResultSectionsProps {
   analysis: AnalysisResult
@@ -49,6 +67,14 @@ export default function ResultSections({ analysis, limitSeconds, audioUrl, categ
   // 历史数据里的旧分类「申论」按「公考面试」处理
   const cat = normalizeCategory(category)
   const viewpointHint = cat ? VIEWPOINT_HINTS[cat] : undefined
+
+  // 表达课方法:四项分中的最低分维度(同分按 观点→结构→内容→流畅度 顺序取先)
+  const dimKeys = Object.keys(DIMENSION_LABELS) as Array<keyof AnalysisResult['scores']>
+  const weakestDim = dimKeys.reduce((a, b) => (analysis.scores[b] < analysis.scores[a] ? b : a))
+  const weakestScore = analysis.scores[weakestDim]
+  const remedyConcepts = DIMENSION_REMEDIES[weakestDim]
+    .map((id) => getConceptById(id))
+    .filter((c) => c !== undefined)
 
   return (
     <>
@@ -176,6 +202,29 @@ export default function ResultSections({ analysis, limitSeconds, audioUrl, categ
           ))}
         </ol>
         <p className="outline-note">提纲保留了你的原观点,不追求完美,只需要再说一次。</p>
+      </section>
+
+      <section className="result-section">
+        <h2>表达课方法</h2>
+        {weakestScore >= NO_WEAKNESS_THRESHOLD ? (
+          <p className="course-more">
+            这次没有明显短板,去<Link to="/course">「表达课」</Link>挑一个方法继续精进。
+          </p>
+        ) : (
+          <>
+            <p className="course-more">「{DIMENSION_LABELS[weakestDim]}」是相对短板,表达课里有对应的方法:</p>
+            <div className="concept-grid">
+              {remedyConcepts.map((c) => (
+                <div key={c.id} className="concept-card compact">
+                  <h3>{c.name}</h3>
+                  <p>{c.oneLiner}</p>
+                  <p className="concept-usage">{c.howToUse}</p>
+                  <p className="concept-source">{c.source}</p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </section>
     </>
   )
