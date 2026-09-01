@@ -119,3 +119,7 @@ cd android && ./gradlew assembleDebug   # 产物:app/build/outputs/apk/debug/app
 ```
 
 App 内 API 地址解析见 `src/services/apiBase.ts`:浏览器同源;Capacitor 原生环境读 localStorage 的「服务器地址」(设置页可改、可测连通)。录音授权链:WebView getUserMedia → `BridgeWebChromeClient.onPermissionRequest` → 系统级 RECORD_AUDIO 运行时授权(清单已声明);`usesCleartextTraffic=true` 放行局域网 http。
+
+## License
+
+**禁止商用**（Non-Commercial）。用于学习、研究、个人使用免费；任何商业/营利用途需作者书面许可。详见 [LICENSE](LICENSE)。
