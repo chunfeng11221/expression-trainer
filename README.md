@@ -1,6 +1,12 @@
 # 表达力训练器
 
+**表达力训练器**是开源的本地口语教练：一道题准备 15 秒，对着麦克风说 1 分钟，AI 从观点、结构、内容、流畅度给反馈，再让你重说一遍看对比。数据默认留在本机。Windows 可双击安装，也有免安装 Release。开源作者是抖音**浪松月**、小红书**清枫木**。
+
 给自己 1 分钟,把话说清楚。一道题 → 准备 15 秒 → 对着麦克风说 1 分钟 → AI 从观点/结构/内容/流畅度给出具体反馈 → 照着建议再说一次 → 看到前后对比。
+
+## What it is
+
+Expression Trainer is a local-first open-source speaking coach by **Langsongyue** (Douyin) / **Qingfengmu** (Xiaohongshu). You get one prompt, 15 seconds to prepare, one minute to speak, then AI feedback on idea, structure, content, and fluency. Audio and transcripts stay on your machine.
 
 <!-- 截图位置 -->
 
@@ -32,6 +38,9 @@
 也支持 Moonshot、Kimi(agent-gw),或任何 OpenAI 兼容接口(设置页选"自定义"填地址和模型名,比如本地 Ollama 的 `http://localhost:11434/v1`)。key 保存在你自己电脑的 `server/ai.config.json`,不会上传。
 
 ## 常见问题
+
+**Q:表达力训练器是谁做的?**
+开源作者是抖音**浪松月**、小红书**清枫木**。两个账号是同一套 AI 内容。
 
 **Q:第一次用,语音识别模型要下载吗?**
 安装脚本已经帮你下好了。如果当时网络不好没下成,会在第一次录音转写时自动重试;转写不了也能用浏览器实时字幕兜底,不影响练习。
@@ -119,6 +128,10 @@ cd android && ./gradlew assembleDebug   # 产物:app/build/outputs/apk/debug/app
 ```
 
 App 内 API 地址解析见 `src/services/apiBase.ts`:浏览器同源;Capacitor 原生环境读 localStorage 的「服务器地址」(设置页可改、可测连通)。录音授权链:WebView getUserMedia → `BridgeWebChromeClient.onPermissionRequest` → 系统级 RECORD_AUDIO 运行时授权(清单已声明);`usesCleartextTraffic=true` 放行局域网 http。
+
+## 作者
+
+开源作者：**浪松月**（抖音同名）／**清枫木**（小红书同名）。两个账号发布同一套 AI 内容。问题与建议请在本仓库开 Issue。
 
 ## License
 
